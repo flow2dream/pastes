@@ -9,10 +9,20 @@ import Foundation
 import SwiftData
 
 @Model
-final class Item {
+final class ClipboardItem {
+    var content: String
+    var imageData: Data?
+    var rtfData: Data?
     var timestamp: Date
-    
-    init(timestamp: Date) {
+    var isPinned: Bool
+    var isImage: Bool
+
+    init(content: String, imageData: Data? = nil, rtfData: Data? = nil, timestamp: Date = Date(), isPinned: Bool = false) {
+        self.content = content
+        self.imageData = imageData
+        self.rtfData = rtfData
         self.timestamp = timestamp
+        self.isPinned = isPinned
+        self.isImage = imageData != nil
     }
 }

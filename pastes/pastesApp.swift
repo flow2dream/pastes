@@ -10,23 +10,74 @@ import SwiftData
 
 @main
 struct pastesApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Item.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
-        }
-    }()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
+        // All UI is managed by PanelManager via AppDelegate
         WindowGroup {
-            ContentView()
+            EmptyView()
         }
-        .modelContainer(sharedModelContainer)
+        .windowResizability(.contentSize)
+        .defaultLaunchBehavior(.suppressed)
+    }
+}
+
+// MARK: - AppDelegate
+
+class AppDelegate: NSObject, NSApplicationDelegate {
+    private let hotkeyManager = HotkeyManager.shared
+    private var panelManager: PanelManager!
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // Set accessory policy BEFORE the WindowGroup window appears
+        NSApp.setActivationPolicy(.accessory)
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let modelContainer: ModelContainer
+        do {
+            let schema = Schema([ClipboardItem.self])
+            let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+            modelContainer = try ModelContainer(for: schema, configurations: [config])
+        } catch {
+            // Fallback: try deleting corrupted store and retry
+            let storeURL = URL.applicationSupportDirectory.appendingPathComponent("default.store")
+            try? FileManager.default.removeItem(at: storeURL)
+            do {
+                let schema = Schema([ClipboardItem.self])
+                let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+                modelContainer = try ModelContainer(for: schema, configurations: [config])
+            } catch {
+                fatalError("Failed to create ModelContainer: \(error)")
+            }
+        }
+
+        panelManager = PanelManager(modelContainer: modelContainer)
+
+        // Request accessibility permission on launch
+        ClipboardMonitor.requestAccessibility()
+
+        hotkeyManager.register { [weak self] in
+            self?.panelManager.toggle(atMouse: true)
+        }
+
+        // Close any stray windows (including SwiftUI WindowGroup)
+        DispatchQueue.main.async {
+            NSApp.windows.forEach { window in
+                window.orderOut(nil)
+                window.isExcludedFromWindowsMenu = true
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            NSApp.windows.forEach { window in
+                if window !== self.panelManager.panelWindow {
+                    window.orderOut(nil)
+                }
+            }
+        }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        hotkeyManager.unregister()
     }
 }
