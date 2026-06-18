@@ -14,11 +14,6 @@ final class UpdateManager: NSObject {
 
     private override init() {
         super.init()
-        // Sync app language with system for Sparkle localization
-        let lang = LocalizationManager.shared.language
-        UserDefaults.standard.set([lang.rawValue], forKey: "AppleLanguages")
-        UserDefaults.standard.synchronize()
-
         updaterController = SPUStandardUpdaterController(
             startingUpdater: true,
             updaterDelegate: self,

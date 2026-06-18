@@ -18,7 +18,6 @@ struct pastesApp: App {
             EmptyView()
         }
         .windowResizability(.contentSize)
-        .defaultLaunchBehavior(.suppressed)
     }
 }
 
@@ -29,6 +28,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var panelManager: PanelManager!
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        // Set app language before any framework loads
+        let lang = UserDefaults.standard.string(forKey: "appLanguage") ?? "zh_CN"
+        UserDefaults.standard.set([lang], forKey: "AppleLanguages")
+
         // Set accessory policy BEFORE the WindowGroup window appears
         NSApp.setActivationPolicy(.accessory)
     }
