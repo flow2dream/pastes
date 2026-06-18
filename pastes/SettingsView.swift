@@ -18,6 +18,7 @@ struct SettingsView: View {
     @AppStorage("appLanguage") private var language: AppLanguage = .zh
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var showConflictAlert = false
+    @State private var showNoUpdateAlert = false
     @State private var autoCheckUpdate = UpdateManager.shared.automaticallyChecksForUpdates
     private let updateManager = UpdateManager.shared
 
@@ -184,6 +185,14 @@ struct SettingsView: View {
                             }
                             .buttonStyle(.bordered)
                         }
+                    }
+                    .onAppear {
+                        updateManager.onNoUpdate = { showNoUpdateAlert = true }
+                    }
+                    .alert(L("no_update_title"), isPresented: $showNoUpdateAlert) {
+                        Button(L("no_update_ok")) {}
+                    } message: {
+                        Text(L("no_update_msg"))
                     }
 
                     // Tips section
