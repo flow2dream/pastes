@@ -22,6 +22,11 @@ final class UpdateManager: NSObject {
             userDriver: userDriver,
             delegate: self
         )
+        do {
+            try updater.start()
+        } catch {
+            print("[Pastes] Failed to start updater: \(error)")
+        }
     }
 
     var canCheckForUpdates: Bool {
