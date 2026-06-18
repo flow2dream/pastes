@@ -11,7 +11,6 @@ final class UpdateManager: NSObject {
     static let shared = UpdateManager()
 
     private var updaterController: SPUStandardUpdaterController!
-    var onNoUpdate: (() -> Void)?
 
     private override init() {
         super.init()
@@ -48,12 +47,6 @@ extension UpdateManager: SPUUpdaterDelegate {
 
     func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
         print("[Pastes] Update error: \(error.localizedDescription)")
-    }
-
-    func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
-        DispatchQueue.main.async {
-            self.onNoUpdate?()
-        }
     }
 
     func allowedChannels(for updater: SPUUpdater) -> Set<String> {
