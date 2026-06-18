@@ -9,7 +9,7 @@ import SwiftUI
 
 enum AppLanguage: String, CaseIterable {
     case en = "en"
-    case zh = "zh-Hans"
+    case zh = "zh_CN"
 
     var displayName: String {
         switch self {
