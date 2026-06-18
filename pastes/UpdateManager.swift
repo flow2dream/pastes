@@ -16,7 +16,7 @@ final class UpdateManager: NSObject {
         super.init()
         updaterController = SPUStandardUpdaterController(
             startingUpdater: true,
-            updaterDelegate: nil,
+            updaterDelegate: self,
             userDriverDelegate: nil
         )
     }
@@ -26,7 +26,12 @@ final class UpdateManager: NSObject {
     }
 
     @objc func checkForUpdates() {
-        updaterController.checkForUpdates(nil)
+        print("[Pastes] checkForUpdates called, canCheck: \(canCheckForUpdates)")
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            print("[Pastes] Calling Sparkle checkForUpdates")
+            self.updaterController.checkForUpdates(nil)
+        }
     }
 
     var automaticallyChecksForUpdates: Bool {
@@ -37,5 +42,19 @@ final class UpdateManager: NSObject {
     var updateCheckInterval: TimeInterval {
         get { updaterController.updater.updateCheckInterval }
         set { updaterController.updater.updateCheckInterval = newValue }
+    }
+}
+
+extension UpdateManager: SPUUpdaterDelegate {
+    func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
+        print("[Pastes] Sparkle error: \(error.localizedDescription)")
+    }
+
+    func allowedChannels(for updater: SPUUpdater) -> Set<String> {
+        []
+    }
+
+    func updaterMayCheck(forUpdates updater: SPUUpdater) -> Bool {
+        true
     }
 }
