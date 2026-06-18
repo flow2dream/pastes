@@ -56,6 +56,8 @@ final class LocalizationManager {
 
         // Header
         "clear_all": "Clear All",
+        "pin_panel": "Pin window",
+        "unpin_panel": "Unpin window",
 
         // Context menu
         "context_copy": "Copy",
@@ -82,6 +84,10 @@ final class LocalizationManager {
         "launch_at_login_title": "Launch at Login",
         "launch_at_login_desc": "Automatically open Pastes when you log in to your Mac.",
         "launch_at_login_toggle": "Launch at login",
+        "update_title": "Updates",
+        "update_desc": "Automatically check for new versions of Pastes.",
+        "auto_check_update": "Automatically check for updates",
+        "check_update_now": "Check for Updates",
         "tips_title": "Tips",
         "tip_modifier": "Include at least one modifier key (⌘⌥⌃⇧)",
         "tip_global": "The shortcut works globally, even when the app is hidden",
@@ -112,6 +118,8 @@ final class LocalizationManager {
 
         // Header
         "clear_all": "清除全部",
+        "pin_panel": "置顶窗口",
+        "unpin_panel": "取消置顶",
 
         // Context menu
         "context_copy": "复制",
@@ -138,6 +146,10 @@ final class LocalizationManager {
         "launch_at_login_title": "开机自启",
         "launch_at_login_desc": "登录 Mac 时自动启动剪贴板。",
         "launch_at_login_toggle": "开机自启",
+        "update_title": "更新",
+        "update_desc": "自动检查 Pastes 的新版本。",
+        "auto_check_update": "自动检查更新",
+        "check_update_now": "检查更新",
         "tips_title": "提示",
         "tip_modifier": "至少包含一个修饰键 (⌘⌥⌃⇧)",
         "tip_global": "快捷键全局生效，即使应用处于隐藏状态",

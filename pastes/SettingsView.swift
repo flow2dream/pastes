@@ -18,6 +18,8 @@ struct SettingsView: View {
     @AppStorage("appLanguage") private var language: AppLanguage = .zh
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var showConflictAlert = false
+    @State private var autoCheckUpdate = UpdateManager.shared.automaticallyChecksForUpdates
+    private let updateManager = UpdateManager.shared
 
     // System shortcuts that conflict
     private static let systemShortcuts: [(Int, Int)] = [
@@ -163,6 +165,25 @@ struct SettingsView: View {
                                     launchAtLogin = SMAppService.mainApp.status == .enabled
                                 }
                             }
+                    }
+
+                    // Update section
+                    settingsSection(
+                        icon: "arrow.triangle.2.circlepath",
+                        title: L("update_title"),
+                        description: L("update_desc")
+                    ) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Toggle(L("auto_check_update"), isOn: $autoCheckUpdate)
+                                .toggleStyle(.switch)
+                                .onChange(of: autoCheckUpdate) { _, newValue in
+                                    updateManager.automaticallyChecksForUpdates = newValue
+                                }
+                            Button(L("check_update_now")) {
+                                updateManager.checkForUpdates()
+                            }
+                            .buttonStyle(.bordered)
+                        }
                     }
 
                     // Tips section

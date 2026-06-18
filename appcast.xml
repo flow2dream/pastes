@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <channel>
+        <title>Pastes</title>
+        <link>https://github.com/flow2dream/pastes</link>
+        <description>Most recent changes with links to updates.</description>
+        <language>en</language>
+        <item>
+            <title>Version 1.0.0</title>
+            <description><![CDATA[
+                <h3>Pastes v1.0.0</h3>
+                <ul>
+                    <li>剪贴板历史记录（文本 + 图片）</li>
+                    <li>富文本格式保留（RTF）</li>
+                    <li>全局快捷键 ⌘⇧V</li>
+                    <li>一键粘贴</li>
+                    <li>固定收藏、搜索过滤</li>
+                    <li>中英双语界面</li>
+                </ul>
+            ]]></description>
+            <pubDate>Tue, 17 Jun 2026 00:00:00 +0800</pubDate>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <enclosure
+                url="https://github.com/flow2dream/pastes/releases/download/v1.0.0/Pastes.dmg"
+                sparkle:version="1.0.0"
+                sparkle:shortVersionString="1.0.0"
+                length="1468327"
+                type="application/octet-stream"
+                sparkle:edSignature="+BtwGwHvptuImVFqyEjH5LYg4jBE+mt/MB8ru9auPREEfWaF5vERpczm0MbkKCrDWrKleKPkUOXmiYGfuPuFBg=="
+            />
+        </item>
+    </channel>
+</rss>
