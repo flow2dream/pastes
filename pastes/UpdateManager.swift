@@ -10,28 +10,31 @@ import Sparkle
 final class UpdateManager: NSObject {
     static let shared = UpdateManager()
 
-    private var updaterController: SPUStandardUpdaterController!
+    private var updater: SPUUpdater!
+    private var userDriver: SPUStandardUserDriver!
 
     private override init() {
         super.init()
-        updaterController = SPUStandardUpdaterController(
-            startingUpdater: true,
-            updaterDelegate: self,
-            userDriverDelegate: nil
+        userDriver = SPUStandardUserDriver(hostBundle: Bundle.main, delegate: nil)
+        updater = try! SPUUpdater(
+            hostBundle: Bundle.main,
+            applicationBundle: Bundle.main,
+            userDriver: userDriver,
+            delegate: self
         )
     }
 
     var canCheckForUpdates: Bool {
-        updaterController.updater.canCheckForUpdates
+        updater.canCheckForUpdates
     }
 
     @objc func checkForUpdates() {
-        updaterController.checkForUpdates(nil)
+        updater.checkForUpdates()
     }
 
     var automaticallyChecksForUpdates: Bool {
-        get { updaterController.updater.automaticallyChecksForUpdates }
-        set { updaterController.updater.automaticallyChecksForUpdates = newValue }
+        get { updater.automaticallyChecksForUpdates }
+        set { updater.automaticallyChecksForUpdates = newValue }
     }
 }
 
@@ -50,5 +53,14 @@ extension UpdateManager: SPUUpdaterDelegate {
 
     func updaterMayCheck(forUpdates updater: SPUUpdater) -> Bool {
         true
+    }
+
+    // Force Chinese localization for Sparkle UI
+    func allowedSparkleBundleLocalizations(for updater: SPUUpdater) -> [String] {
+        let lang = LocalizationManager.shared.language
+        if lang == .zh {
+            return ["zh_CN", "zh-Hans", "zh"]
+        }
+        return ["en"]
     }
 }
