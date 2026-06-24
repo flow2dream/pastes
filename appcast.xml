@@ -6,6 +6,27 @@
         <description>Most recent changes with links to updates.</description>
         <language>en</language>
         <item>
+            <title>Version 1.0.2</title>
+            <description><![CDATA[
+                <h3>Pastes v1.0.2</h3>
+                <ul>
+                    <li>修复 Finder 复制图片文件无法显示为图片的问题</li>
+                    <li>优化图片剪贴板检测，优先从文件路径加载原图</li>
+                    <li>支持更多图片格式（PNG/JPG/GIF/WebP/HEIC 等）</li>
+                </ul>
+            ]]></description>
+            <pubDate>Tue, 24 Jun 2026 00:00:00 +0800</pubDate>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <enclosure
+                url="https://github.com/flow2dream/pastes/releases/download/v1.0.2/Pastes.dmg"
+                sparkle:version="1.0.2"
+                sparkle:shortVersionString="1.0.2"
+                length="1482567"
+                type="application/octet-stream"
+                sparkle:edSignature="itwphBYNi0DHGQKzocGoWOSjnfij14kl8PN5v0AbwQ2bcb8tYiGHVCpixR6tqlVWIxni8vYr9oxDro0AqkfTAw=="
+            />
+        </item>
+        <item>
             <title>Version 1.0.1</title>
             <description><![CDATA[
                 <h3>Pastes v1.0.1</h3>

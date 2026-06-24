@@ -15,8 +15,10 @@ struct ContentView: View {
     @State private var monitor = ClipboardMonitor()
     @State private var copiedItemId: PersistentIdentifier?
     @State private var hoveredItemId: PersistentIdentifier?
+    @State private var isPanelPinned = false
     var onOpenSettings: (() -> Void)?
     var onPaste: (() -> Void)?
+    var onTogglePin: (() -> Bool)?
 
     private var filteredItems: [ClipboardItem] {
         if searchText.isEmpty { return items }
@@ -64,6 +66,17 @@ struct ContentView: View {
             }
             .buttonStyle(.borderless)
             .disabled(items.isEmpty)
+            Button {
+                if let result = onTogglePin?() {
+                    isPanelPinned = result
+                }
+            } label: {
+                Image(systemName: isPanelPinned ? "pin.fill" : "pin")
+                    .font(.body)
+                    .foregroundStyle(isPanelPinned ? .red : .secondary)
+            }
+            .buttonStyle(.borderless)
+            .help(isPanelPinned ? L("unpin_panel") : L("pin_panel"))
             Button {
                 onOpenSettings?()
             } label: {

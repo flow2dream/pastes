@@ -37,6 +37,7 @@ final class PanelManager: NSObject {
     private let modelContainer: ModelContainer
     private var previousApp: NSRunningApplication?
     private var globalMonitor: Any?
+    var isPanelPinned = false
 
     var panelWindow: NSWindow? { panel }
 
@@ -136,6 +137,10 @@ final class PanelManager: NSObject {
             },
             onPaste: { [weak self] in
                 self?.handlePaste()
+            },
+            onTogglePin: { [weak self] in
+                self?.isPanelPinned.toggle()
+                return self?.isPanelPinned ?? false
             }
         )
         .modelContainer(modelContainer)
@@ -168,6 +173,7 @@ final class PanelManager: NSObject {
 
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             guard let self, let panel = self.panel, panel.isVisible else { return }
+            guard !self.isPanelPinned else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                 if !panel.isKeyWindow && !panel.isMainWindow {
                     self.hidePanel()

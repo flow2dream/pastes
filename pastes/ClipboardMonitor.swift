@@ -27,6 +27,30 @@ final class ClipboardMonitor {
         timer = nil
     }
 
+    /// Image file extensions to recognize
+    private static let imageExtensions: Set<String> = [
+        "png", "jpg", "jpeg", "gif", "bmp", "tiff", "tif", "webp", "heic", "heif", "icns", "ico", "svg"
+    ]
+
+    /// Check if a file path points to an image
+    private func isImageFile(_ path: String) -> Bool {
+        let ext = (path as NSString).pathExtension.lowercased()
+        return Self.imageExtensions.contains(ext)
+    }
+
+    /// Load image data from a file path
+    private func loadImageData(from path: String) -> Data? {
+        let url = URL(fileURLWithPath: path)
+        guard let image = NSImage(contentsOf: url) else { return nil }
+        // Convert to PNG for consistent storage
+        guard let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:]) else {
+            return image.tiffRepresentation
+        }
+        return png
+    }
+
     func checkPasteboard() {
         let pasteboard = NSPasteboard.general
         guard pasteboard.changeCount != lastChangeCount else { return }
@@ -35,22 +59,57 @@ final class ClipboardMonitor {
 
         let types = pasteboard.types ?? []
 
-        // Check for image data first
+        // Check for filenames FIRST (Finder file copy)
+        // This must come before .tiff check because Finder puts both
+        // file path AND a TIFF preview on the pasteboard for image files
+        let filenamesType = NSPasteboard.PasteboardType("NSFilenamesPboardType")
+        if types.contains(filenamesType),
+           let plist = pasteboard.propertyList(forType: filenamesType) as? [String],
+           let path = plist.first {
+            if isImageFile(path), let data = loadImageData(from: path) {
+                print("[Pastes] -> Image file from Finder: \(path)")
+                onCopyImage?(data)
+            }
+            // Skip non-image files entirely
+            return
+        }
+
+        // Check for raw image data (e.g. screenshot, copied image pixels)
         if types.contains(.tiff) || types.contains(.png) {
             if let data = pasteboard.data(forType: .tiff) ?? pasteboard.data(forType: .png) {
+                print("[Pastes] -> Raw image data: \(data.count) bytes")
                 onCopyImage?(data)
             }
             return
         }
 
-        // Skip file URLs
+        // Check for file URLs
         if types.contains(.fileURL) {
+            if let urlString = pasteboard.string(forType: .fileURL),
+               let url = URL(string: urlString) {
+                let path = url.path
+                if isImageFile(path), let data = loadImageData(from: path) {
+                    print("[Pastes] -> Image from file URL: \(path)")
+                    onCopyImage?(data)
+                }
+            }
             return
         }
 
-        if let text = pasteboard.string(forType: .string), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            let rtfData = pasteboard.data(forType: .rtf)
-            onCopy?(text, rtfData)
+        // Check if string is actually a file path to an image
+        if let text = pasteboard.string(forType: .string) {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.hasPrefix("/") && isImageFile(trimmed) {
+                if let data = loadImageData(from: trimmed) {
+                    print("[Pastes] -> Image from string path: \(trimmed)")
+                    onCopyImage?(data)
+                    return
+                }
+            }
+            if !trimmed.isEmpty {
+                let rtfData = pasteboard.data(forType: .rtf)
+                onCopy?(text, rtfData)
+            }
         }
     }
 

@@ -15,7 +15,7 @@ final class ClipboardItem {
     var rtfData: Data?
     var timestamp: Date
     var isPinned: Bool
-    var isImage: Bool
+    var isImage: Bool = false
 
     init(content: String, imageData: Data? = nil, rtfData: Data? = nil, timestamp: Date = Date(), isPinned: Bool = false) {
         self.content = content
