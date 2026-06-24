@@ -13,6 +13,9 @@
                     <li>修复 Finder 复制图片文件无法显示为图片的问题</li>
                     <li>优化图片剪贴板检测，优先从文件路径加载原图</li>
                     <li>支持更多图片格式（PNG/JPG/GIF/WebP/HEIC 等）</li>
+                    <li>全新设置界面 UI，彩色图标卡片布局</li>
+                    <li>设置界面显示当前版本号</li>
+                    <li>按钮悬停效果，提升交互体验</li>
                 </ul>
             ]]></description>
             <pubDate>Tue, 24 Jun 2026 00:00:00 +0800</pubDate>
