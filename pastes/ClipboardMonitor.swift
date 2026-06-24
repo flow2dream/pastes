@@ -67,7 +67,6 @@ final class ClipboardMonitor {
            let plist = pasteboard.propertyList(forType: filenamesType) as? [String],
            let path = plist.first {
             if isImageFile(path), let data = loadImageData(from: path) {
-                print("[Pastes] -> Image file from Finder: \(path)")
                 onCopyImage?(data)
             }
             // Skip non-image files entirely
@@ -77,7 +76,6 @@ final class ClipboardMonitor {
         // Check for raw image data (e.g. screenshot, copied image pixels)
         if types.contains(.tiff) || types.contains(.png) {
             if let data = pasteboard.data(forType: .tiff) ?? pasteboard.data(forType: .png) {
-                print("[Pastes] -> Raw image data: \(data.count) bytes")
                 onCopyImage?(data)
             }
             return
@@ -89,7 +87,6 @@ final class ClipboardMonitor {
                let url = URL(string: urlString) {
                 let path = url.path
                 if isImageFile(path), let data = loadImageData(from: path) {
-                    print("[Pastes] -> Image from file URL: \(path)")
                     onCopyImage?(data)
                 }
             }
@@ -101,7 +98,6 @@ final class ClipboardMonitor {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.hasPrefix("/") && isImageFile(trimmed) {
                 if let data = loadImageData(from: trimmed) {
-                    print("[Pastes] -> Image from string path: \(trimmed)")
                     onCopyImage?(data)
                     return
                 }

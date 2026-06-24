@@ -18,37 +18,39 @@ struct SettingsView: View {
     @AppStorage("appLanguage") private var language: AppLanguage = .zh
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var showConflictAlert = false
-    @State private var autoCheckUpdate = UpdateManager.shared.automaticallyChecksForUpdates
+    @State private var hoveredButton: String?
     private let updateManager = UpdateManager.shared
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+    }
 
-    // System shortcuts that conflict
     private static let systemShortcuts: [(Int, Int)] = [
-        (kVK_ANSI_Q, cmdKey),           // ⌘Q Quit
-        (kVK_ANSI_W, cmdKey),           // ⌘W Close
-        (kVK_ANSI_C, cmdKey),           // ⌘C Copy
-        (kVK_ANSI_V, cmdKey),           // ⌘V Paste
-        (kVK_ANSI_X, cmdKey),           // ⌘X Cut
-        (kVK_ANSI_Z, cmdKey),           // ⌘Z Undo
-        (kVK_ANSI_A, cmdKey),           // ⌘A Select All
-        (kVK_ANSI_S, cmdKey),           // ⌘S Save
-        (kVK_ANSI_P, cmdKey),           // ⌘P Print
-        (kVK_ANSI_F, cmdKey),           // ⌘F Find
-        (kVK_ANSI_H, cmdKey),           // ⌘H Hide
-        (kVK_ANSI_M, cmdKey),           // ⌘M Minimize
-        (kVK_ANSI_N, cmdKey),           // ⌘N New
-        (kVK_ANSI_O, cmdKey),           // ⌘O Open
-        (kVK_ANSI_P, cmdKey | shiftKey), // ⌘⇧P
-        (kVK_ANSI_Z, cmdKey | shiftKey), // ⌘⇧Z Redo
-        (kVK_ANSI_3, cmdKey | shiftKey), // ⌘⇧3 Screenshot
-        (kVK_ANSI_4, cmdKey | shiftKey), // ⌘⇧4 Screenshot
-        (kVK_ANSI_5, cmdKey | shiftKey), // ⌘⇧5 Screenshot
-        (kVK_Space, cmdKey),            // ⌘Space Spotlight
-        (kVK_Space, cmdKey | optionKey), // ⌘⌥Space Finder search
-        (kVK_Tab, cmdKey),              // ⌘Tab App switcher
-        (kVK_UpArrow, controlKey),      // Ctrl↑ Mission Control
-        (kVK_DownArrow, controlKey),    // Ctrl↓ Mission Control
-        (kVK_LeftArrow, cmdKey),        // ⌘← Desktop
-        (kVK_RightArrow, cmdKey),       // ⌘→ Desktop
+        (kVK_ANSI_Q, cmdKey),
+        (kVK_ANSI_W, cmdKey),
+        (kVK_ANSI_C, cmdKey),
+        (kVK_ANSI_V, cmdKey),
+        (kVK_ANSI_X, cmdKey),
+        (kVK_ANSI_Z, cmdKey),
+        (kVK_ANSI_A, cmdKey),
+        (kVK_ANSI_S, cmdKey),
+        (kVK_ANSI_P, cmdKey),
+        (kVK_ANSI_F, cmdKey),
+        (kVK_ANSI_H, cmdKey),
+        (kVK_ANSI_M, cmdKey),
+        (kVK_ANSI_N, cmdKey),
+        (kVK_ANSI_O, cmdKey),
+        (kVK_ANSI_P, cmdKey | shiftKey),
+        (kVK_ANSI_Z, cmdKey | shiftKey),
+        (kVK_ANSI_3, cmdKey | shiftKey),
+        (kVK_ANSI_4, cmdKey | shiftKey),
+        (kVK_ANSI_5, cmdKey | shiftKey),
+        (kVK_Space, cmdKey),
+        (kVK_Space, cmdKey | optionKey),
+        (kVK_Tab, cmdKey),
+        (kVK_UpArrow, controlKey),
+        (kVK_DownArrow, controlKey),
+        (kVK_LeftArrow, cmdKey),
+        (kVK_RightArrow, cmdKey),
     ]
 
     private func isSystemShortcut(keyCode: Int, modifiers: Int) -> Bool {
@@ -66,64 +68,102 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Header
+            VStack(spacing: 6) {
+                Image(systemName: "clipboard.fill")
+                    .font(.system(size: 28))
+                    .foregroundStyle(.linearGradient(
+                        colors: [.accentColor, .accentColor.opacity(0.6)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+                Text(L("settings_title"))
+                    .font(.title3.bold())
+            }
+            .padding(.top, 20)
+            .padding(.bottom, 16)
+
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: 14) {
                     // Hotkey section
-                    settingsSection(
-                        icon: "keyboard",
-                        title: L("hotkey_title"),
-                        description: L("hotkey_desc")
-                    ) {
+                    settingsCard(icon: "keyboard.fill", title: L("hotkey_title"), accent: .blue) {
+                        Text(L("hotkey_desc"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.bottom, 6)
+
                         HStack(spacing: 10) {
                             ZStack {
                                 RoundedRectangle(cornerRadius: 8)
-                                    .fill(isRecording ? Color.accentColor.opacity(0.12) : Color(nsColor: .controlBackgroundColor))
+                                    .fill(isRecording
+                                        ? Color.accentColor.opacity(0.1)
+                                        : Color(nsColor: .controlBackgroundColor))
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 8)
-                                            .stroke(isRecording ? Color.accentColor.opacity(0.6) : Color(nsColor: .separatorColor), lineWidth: 1)
+                                            .stroke(
+                                                isRecording
+                                                    ? Color.accentColor.opacity(0.5)
+                                                    : Color(nsColor: .separatorColor).opacity(0.5),
+                                                lineWidth: 1
+                                            )
                                     )
 
                                 if isRecording {
-                                    Text(L("hotkey_recording"))
-                                        .font(.system(.body, design: .monospaced))
-                                        .foregroundStyle(.secondary)
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "mic.fill")
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(.red)
+                                        Text(L("hotkey_recording"))
+                                            .font(.system(.body, design: .monospaced))
+                                            .foregroundStyle(.secondary)
+                                    }
                                 } else {
                                     Text(hotkeyManager.displayString)
                                         .font(.system(.body, design: .monospaced))
                                 }
                             }
-                            .frame(height: 36)
+                            .frame(height: 34)
                             .frame(maxWidth: 200)
                             .onTapGesture { startRecording() }
 
                             if isRecording {
                                 Button(L("hotkey_cancel")) { stopRecording() }
                                     .buttonStyle(.bordered)
+                                    .brightness(hoveredButton == "cancel" ? 0.1 : 0)
+                                    .scaleEffect(hoveredButton == "cancel" ? 1.03 : 1.0)
+                                    .animation(.easeInOut(duration: 0.15), value: hoveredButton)
+                                    .onHover { hoveredButton = $0 ? "cancel" : nil }
                             } else {
                                 Button(L("hotkey_reset")) {
                                     hotkeyManager.update(keyCode: kVK_ANSI_V, modifiers: defaultModifiers)
                                 }
                                 .buttonStyle(.bordered)
+                                .brightness(hoveredButton == "reset" ? 0.1 : 0)
+                                .scaleEffect(hoveredButton == "reset" ? 1.03 : 1.0)
+                                .animation(.easeInOut(duration: 0.15), value: hoveredButton)
+                                .onHover { hoveredButton = $0 ? "reset" : nil }
                             }
                         }
 
                         if isRecording {
                             Text(L("hotkey_hint"))
-                                .font(.caption)
+                                .font(.caption2)
                                 .foregroundStyle(.tertiary)
+                                .padding(.top, 2)
                         }
                     }
 
                     // History limit section
-                    settingsSection(
-                        icon: "archivebox",
-                        title: L("history_limit_title"),
-                        description: L("history_limit_desc")
-                    ) {
+                    settingsCard(icon: "archivebox.fill", title: L("history_limit_title"), accent: .orange) {
+                        Text(L("history_limit_desc"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.bottom, 6)
+
                         HStack(spacing: 8) {
                             TextField("", value: $maxItems, format: .number)
                                 .textFieldStyle(.roundedBorder)
-                                .frame(width: 80)
+                                .frame(width: 72)
                             Text(L("history_limit_items"))
                                 .foregroundStyle(.secondary)
                                 .font(.subheadline)
@@ -131,11 +171,12 @@ struct SettingsView: View {
                     }
 
                     // Language section
-                    settingsSection(
-                        icon: "globe",
-                        title: L("language_title"),
-                        description: L("language_desc")
-                    ) {
+                    settingsCard(icon: "globe", title: L("language_title"), accent: .purple) {
+                        Text(L("language_desc"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.bottom, 6)
+
                         Picker("", selection: $language) {
                             ForEach(AppLanguage.allCases, id: \.self) { lang in
                                 Text(lang.displayName).tag(lang)
@@ -147,60 +188,79 @@ struct SettingsView: View {
                     }
 
                     // Launch at login section
-                    settingsSection(
-                        icon: "power",
-                        title: L("launch_at_login_title"),
-                        description: L("launch_at_login_desc")
-                    ) {
-                        Toggle(L("launch_at_login_toggle"), isOn: $launchAtLogin)
-                            .toggleStyle(.switch)
-                            .onChange(of: launchAtLogin) { _, newValue in
-                                do {
-                                    if newValue {
-                                        try SMAppService.mainApp.register()
-                                    } else {
-                                        try SMAppService.mainApp.unregister()
+                    settingsCard(icon: "power", title: L("launch_at_login_title"), accent: .green) {
+                        HStack {
+                            Text(L("launch_at_login_desc"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Toggle("", isOn: $launchAtLogin)
+                                .toggleStyle(.switch)
+                                .labelsHidden()
+                                .onChange(of: launchAtLogin) { _, newValue in
+                                    do {
+                                        if newValue {
+                                            try SMAppService.mainApp.register()
+                                        } else {
+                                            try SMAppService.mainApp.unregister()
+                                        }
+                                    } catch {
+                                        launchAtLogin = SMAppService.mainApp.status == .enabled
                                     }
-                                } catch {
-                                    launchAtLogin = SMAppService.mainApp.status == .enabled
                                 }
-                            }
+                        }
                     }
 
                     // Update section
-                    settingsSection(
-                        icon: "arrow.triangle.2.circlepath",
-                        title: L("update_title"),
-                        description: L("update_desc")
-                    ) {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Toggle(L("auto_check_update"), isOn: $autoCheckUpdate)
-                                .toggleStyle(.switch)
-                                .onChange(of: autoCheckUpdate) { _, newValue in
-                                    updateManager.automaticallyChecksForUpdates = newValue
-                                }
-                            Button(L("check_update_now")) {
-                                updateManager.checkForUpdates()
+                    settingsCard(icon: "arrow.triangle.2.circlepath", title: L("update_title"), accent: .teal) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(L("update_desc"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text("\(L("version_label")) \(appVersion)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
                             }
-                            .buttonStyle(.bordered)
+                            Spacer()
+                            Button {
+                                updateManager.checkForUpdates()
+                            } label: {
+                                Label(L("check_update_now"), systemImage: "arrow.down.circle")
+                                    .font(.subheadline)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.teal)
+                            .brightness(hoveredButton == "update" ? 0.1 : 0)
+                            .scaleEffect(hoveredButton == "update" ? 1.03 : 1.0)
+                            .animation(.easeInOut(duration: 0.15), value: hoveredButton)
+                            .onHover { hoveredButton = $0 ? "update" : nil }
                         }
                     }
 
                     // Tips section
-                    VStack(alignment: .leading, spacing: 10) {
-                        Label(L("tips_title"), systemImage: "lightbulb")
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label(L("tips_title"), systemImage: "lightbulb.max")
                             .font(.subheadline.bold())
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.orange)
                         tipRow(L("tip_modifier"))
                         tipRow(L("tip_global"))
                         tipRow(L("tip_default"))
                     }
-                    .padding(.top, 4)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.orange.opacity(0.05))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.orange.opacity(0.12), lineWidth: 1)
+                    )
                 }
-                .padding(20)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 20)
             }
         }
-        .frame(width: 420, height: 460)
+        .frame(width: 420, height: 480)
         .background(KeyEventHandler(isRecording: $isRecording, keyCode: $recordedKeyCode, modifiers: $recordedModifiers) {
             if let key = recordedKeyCode, let mods = recordedModifiers {
                 if isSystemShortcut(keyCode: key, modifiers: mods) {
@@ -220,35 +280,43 @@ struct SettingsView: View {
 
     // MARK: - Components
 
-    private func settingsSection<Content: View>(
+    private func settingsCard<Content: View>(
         icon: String,
         title: String,
-        description: String,
+        accent: Color,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label(title, systemImage: icon)
-                .font(.headline)
-            Text(description)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(accent)
+                    .frame(width: 28, height: 28)
+                    .background(accent.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                Text(title)
+                    .font(.system(.subheadline, weight: .semibold))
+            }
             content()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.4))
         .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color(nsColor: .separatorColor).opacity(0.3), lineWidth: 1)
+        )
     }
 
     private func tipRow(_ text: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 11))
+                .font(.system(size: 10))
                 .foregroundStyle(.green)
-                .padding(.top, 2)
+                .padding(.top, 3)
             Text(text)
-                .font(.subheadline)
+                .font(.caption)
                 .foregroundStyle(.secondary)
         }
     }
