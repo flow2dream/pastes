@@ -6,18 +6,17 @@
 //
 
 import SwiftUI
-import SwiftData
 
 @main
 struct pastesApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        // All UI is managed by PanelManager via AppDelegate
-        WindowGroup {
+        // PanelManager owns every window; a WindowGroup would reopen an empty
+        // window whenever Launch Services activates the development app.
+        Settings {
             EmptyView()
         }
-        .windowResizability(.contentSize)
     }
 }
 
@@ -37,45 +36,41 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let modelContainer: ModelContainer
+        PasteTrace.captureLaunch()
+        let store: ClipboardStore
         do {
-            let schema = Schema([ClipboardItem.self])
-            let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-            modelContainer = try ModelContainer(for: schema, configurations: [config])
+            store = try ClipboardStore(url: AppEnvironment.storageURL)
         } catch {
-            // Fallback: try deleting corrupted store and retry
-            let storeURL = URL.applicationSupportDirectory.appendingPathComponent("default.store")
-            try? FileManager.default.removeItem(at: storeURL)
-            do {
-                let schema = Schema([ClipboardItem.self])
-                let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-                modelContainer = try ModelContainer(for: schema, configurations: [config])
-            } catch {
-                fatalError("Failed to create ModelContainer: \(error)")
-            }
+            let alert = NSAlert()
+            alert.messageText = L("storage_error_title")
+            alert.informativeText = L("storage_open_error") + "\n" + error.localizedDescription
+            alert.alertStyle = .critical
+            NSApp.activate(ignoringOtherApps: true)
+            alert.runModal()
+            NSApp.terminate(nil)
+            return
         }
 
-        panelManager = PanelManager(modelContainer: modelContainer)
+        panelManager = PanelManager(store: store)
+        if PasteTrace.isEnabled {
+            panelManager.isPanelPinned = true
+        }
 
-        // Request accessibility permission on launch
-        ClipboardMonitor.requestAccessibility()
+        // Start the release update schedule at launch, even if Settings stays closed.
+        _ = UpdateManager.shared
+
+        // Keep development launches quiet; request permission when paste is used.
+        if !AppEnvironment.isDevelopment {
+            ClipboardMonitor.requestAccessibility()
+        }
 
         hotkeyManager.register { [weak self] in
             self?.panelManager.toggle(atMouse: true)
         }
 
-        // Close any stray windows (including SwiftUI WindowGroup)
-        DispatchQueue.main.async {
-            NSApp.windows.forEach { window in
-                window.orderOut(nil)
-                window.isExcludedFromWindowsMenu = true
-            }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            NSApp.windows.forEach { window in
-                if window !== self.panelManager.panelWindow {
-                    window.orderOut(nil)
-                }
+        if AppEnvironment.isDevelopment {
+            DispatchQueue.main.async { [weak self] in
+                self?.panelManager.toggle()
             }
         }
     }

@@ -6,9 +6,34 @@
         <description>Most recent changes with links to updates.</description>
         <language>en</language>
         <item>
-            <title>Version 1.0.2</title>
+            <title>Version 1.1.0</title>
             <description><![CDATA[
-                <h3>Pastes v1.0.2</h3>
+                <h3>Pastes v1.1.0</h3>
+                <p><strong>升级提示：</strong>存储已切换为 SQLite，旧版历史及固定记录不会自动迁移。升级后的历史列表从空记录开始，旧数据库文件会保留。请先备份并保留旧版应用。</p>
+                <ul>
+                    <li>紧凑搜索面板、固定分组与统一设置界面，适配浅色和深色模式</li>
+                    <li>修复快速复制和延迟富文本漏记、图片类型标注及粘贴目标跟踪</li>
+                    <li>使用系统事件发送权限检查，未授权时显示手动粘贴提示</li>
+                    <li>改进开机自启状态反馈、快捷键冲突恢复和更新状态刷新</li>
+                    <li>使用 Swift Package Manager，无需完整 Xcode 即可构建</li>
+                </ul>
+                <p>安装包仅支持 Apple Silicon，要求 macOS 26.0 或更高版本。使用开发证书签名，尚未进行 Developer ID 公证。</p>
+            ]]></description>
+            <pubDate>Thu, 29 Oct 2026 20:35:50 +0800</pubDate>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <enclosure
+                url="https://github.com/flow2dream/pastes/releases/download/v1.1.0/Pastes-1.1.0-arm64.dmg"
+                sparkle:version="4"
+                sparkle:shortVersionString="1.1.0"
+                length="1649993"
+                type="application/octet-stream"
+                sparkle:edSignature="LESKXfScH5FXn90OE0NKkd1uxjFdrcPHGN8b1gl2xUdhEXbge9BgYDv/9LbwVR2D00gWsqAMF2mSeNf8jcyaBg=="
+            />
+        </item>
+        <item>
+            <title>Version 1.0.3</title>
+            <description><![CDATA[
+                <h3>Pastes v1.0.3</h3>
                 <ul>
                     <li>修复 Finder 复制图片文件无法显示为图片的问题</li>
                     <li>优化图片剪贴板检测，优先从文件路径加载原图</li>
@@ -22,8 +47,8 @@
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
             <enclosure
                 url="https://github.com/flow2dream/pastes/releases/download/v1.0.2/Pastes.dmg"
-                sparkle:version="1.0.2"
-                sparkle:shortVersionString="1.0.2"
+                sparkle:version="3"
+                sparkle:shortVersionString="1.0.3"
                 length="1515503"
                 type="application/octet-stream"
                 sparkle:edSignature="apWnsRKkv8DHnnzXQzWRI2gf4XtvEm+H9rFjFE5Svom44G65SxbTIvfS9DZnoRi4VNT3hGi88uB0dN1uIqTaBw=="

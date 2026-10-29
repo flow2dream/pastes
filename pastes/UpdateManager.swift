@@ -6,40 +6,54 @@
 //
 
 import Sparkle
+import Combine
+import Foundation
 
-final class UpdateManager: NSObject {
+final class UpdateManager: NSObject, ObservableObject {
     static let shared = UpdateManager()
 
-    private var updater: SPUUpdater!
+    @Published private(set) var canCheckForUpdates = false
+    @Published private(set) var startupError: String?
+
+    private var updater: SPUUpdater?
     private var userDriver: SPUStandardUserDriver!
+    private var updaterObservation: NSKeyValueObservation?
 
     private override init() {
         super.init()
+        // The release feed still serves the legacy SwiftData application.
+        guard !AppEnvironment.isDevelopment else { return }
         userDriver = SPUStandardUserDriver(hostBundle: Bundle.main, delegate: nil)
-        updater = try! SPUUpdater(
+        let updater = SPUUpdater(
             hostBundle: Bundle.main,
             applicationBundle: Bundle.main,
             userDriver: userDriver,
             delegate: self
         )
+        self.updater = updater
+        updaterObservation = updater.observe(\.canCheckForUpdates, options: [.new]) { [weak self] updater, change in
+            let canCheck = change.newValue ?? updater.canCheckForUpdates
+            DispatchQueue.main.async {
+                self?.canCheckForUpdates = canCheck
+            }
+        }
         do {
             try updater.start()
+            canCheckForUpdates = updater.canCheckForUpdates
         } catch {
+            canCheckForUpdates = false
+            startupError = error.localizedDescription
             print("[Pastes] Failed to start updater: \(error)")
         }
     }
 
-    var canCheckForUpdates: Bool {
-        updater.canCheckForUpdates
-    }
-
     @objc func checkForUpdates() {
-        updater.checkForUpdates()
+        updater?.checkForUpdates()
     }
 
     var automaticallyChecksForUpdates: Bool {
-        get { updater.automaticallyChecksForUpdates }
-        set { updater.automaticallyChecksForUpdates = newValue }
+        get { updater?.automaticallyChecksForUpdates ?? false }
+        set { updater?.automaticallyChecksForUpdates = newValue }
     }
 }
 

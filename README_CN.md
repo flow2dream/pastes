@@ -21,41 +21,78 @@ macOS 剪贴板历史管理工具。一键查看、搜索、固定和管理你�
 
 ### 方式一：下载 DMG
 
-从 [Releases](../../releases) 页面下载最新版本的 `Pastes.dmg`，打开后将 Pastes 拖入 Applications 文件夹。
+从 [v1.1.0 Release](https://github.com/flow2dream/pastes/releases/tag/v1.1.0) 下载 `Pastes-1.1.0-arm64.dmg`，打开后将 `Pastes.app` 拖入 Applications 文件夹。安装包适用于 Apple Silicon、macOS 26.0 或更高版本。
 
-> 首次打开时，macOS 可能提示"无法验证开发者"。右键点击 app → 选择「打开」即可。
+> 当前安装包使用开发证书签名，尚未进行 Developer ID 公证。首次安装可能需要在系统设置的「隐私与安全」中明确允许运行。
+
+#### 从旧版升级
+
+v1.1.0 将存储由 SwiftData 改为 SQLite，**旧版历史和固定记录不会自动迁移，升级后新的历史列表会从空记录开始**。旧数据库文件会保留，不会读取或删除；如需保留可直接使用的旧历史，请先备份并保留旧版应用。正式版的新数据位于 `~/Library/Application Support/com.pastes.app.pastes/clipboard.sqlite`。
+
+![Pastes 界面示例](docs/images/pastes-dark.png)
 
 ### 方式二：从源码构建
 
+无需安装完整 Xcode。使用 macOS Command Line Tools（Swift 6.2 或更高版本）即可开发：
+
 ```bash
-git clone git@github.com:flow2dream/pastes.git
+# 如果尚未安装命令行工具，执行后按系统提示完成安装
+xcode-select --install
+
+git clone https://github.com/flow2dream/pastes.git
 cd pastes
-open pastes.xcodeproj
+make run
 ```
 
-在 Xcode 中 `⌘R` 运行。
+本机已安装命令行工具时，跳过 `xcode-select --install`。可以用 Cursor、VS Code 或其他编辑器打开项目目录。
 
-### 构建 DMG 安装包
+- `make build`：编译并打包 Debug 开发版。
+- `make run`：编译并打开开发版。
+- `make test`：运行全部回归测试。
+- `make release`：编译并打包 Release 开发版。
+- `make distribution`：生成正式 `build/Distribution/Pastes.app`。
+- `make package`：生成正式 DMG 与 `SHA256SUMS`，保存在 `build/releases/v<版本>/`。
+
+首次构建需要联网，由 Swift Package Manager 下载锁定版本的 Sparkle。无需数据库服务、Apple 开发者证书或环境密钥。图标由系统 `iconutil` 生成，应用使用本地 ad hoc 签名。
+
+如果本机已有有效的开发签名证书，可把它的 40 位证书指纹写入项目根目录 `.pastes-signing-identity`，或设置 `PASTES_SIGN_IDENTITY`；环境变量优先。该本地文件已被 Git 忽略，缺省仍为 ad hoc。使用同一证书能保持重编译前后的签名身份一致；自动粘贴仍需系统授予辅助功能权限，设置页会显示应用实际检测到的状态。
+
+默认输出为 `build/Debug/Pastes Dev.app`，开发版快捷键为 **`⌘⌥⇧V`**，与已安装的正式版区分。应用启动后常驻菜单栏，不显示 Dock 图标。自动粘贴功能仍需在「系统设置 → 隐私与安全性 → 辅助功能」中为开发版授权。
+
+开发版使用独立的 bundle ID `com.pastes.app.pastes.dev`，历史保存在 `~/Library/Application Support/com.pastes.app.pastes.dev/clipboard.sqlite`。存储已由 SwiftData 改为系统 SQLite，文字、图片、富文本和固定记录均持久化。**旧版 SwiftData 历史不会自动迁移，旧文件不会被读取或删除。** 开发版禁用自动更新，避免被现有正式版更新源覆盖。
+
+完整 Xcode 仍可作为可选编辑器。现有 `.xcodeproj` 保留，但上述命令不使用 `xcodebuild` 或 Xcode 预览宏。
+
+### 构建开发版 DMG
 
 ```bash
-# 编译 Release 版本
-xcodebuild -project pastes.xcodeproj -scheme pastes -configuration Release -derivedDataPath build clean build
+make release
 
-# 创建 DMG
 mkdir -p dmg_staging
-cp -R build/Build/Products/Release/pastes.app dmg_staging/
+cp -R "build/Release/Pastes Dev.app" dmg_staging/
 ln -s /Applications dmg_staging/Applications
-hdiutil create -volname "Pastes" -srcfolder dmg_staging -ov -format UDZO Pastes.dmg
+hdiutil create -volname "Pastes Dev" -srcfolder dmg_staging -ov -format UDZO Pastes-Dev.dmg
 
-# 清理
-rm -rf dmg_staging build
+rm -rf dmg_staging
 ```
 
-生成的 `Pastes.dmg` 即为可分发的安装包。
+生成的 `Pastes-Dev.dmg` 用于本地开发安装，未做 Developer ID 签名和公证。
+
+### 发布前核验正式更新包
+
+对已有的正式版 DMG 和 appcast 做离线核验，不会安装或运行包内应用：
+
+```bash
+xcrun swift scripts/validate-update.swift appcast.xml /path/to/Pastes.dmg
+```
+
+核验涵盖更新包长度、Ed25519 签名、应用代码签名、bundle ID、最低系统版本及版本元数据。`sparkle:version` 必须等于包内 `CFBundleVersion`（构建号），`sparkle:shortVersionString` 必须等于 `CFBundleShortVersionString`（展示版本）。开发版 DMG 会被拒绝，不能投放到正式更新源。正式版在启动时初始化 Sparkle，开发版保持禁用更新。
 
 ## 权限说明
 
-- **辅助功能权限** — 用于自动粘贴功能（模拟 Cmd+V）。首次运行时会弹出授权请求，或在「系统设置 → 隐私与安全性 → 辅助功能」中手动开启。
+- **系统控制权限** — 用于自动粘贴功能（模拟 Cmd+V）。正式版首次运行时请求授权；开发版缺少权限时仅显示面板提示，由你点击设置按钮后申请，同一进程最多主动申请一次。可在系统设置中手动开启，应用设置页显示实际事件发送权限状态。
+
+系统开关显示已开但仍不能自动粘贴时，先在应用设置中检查实际权限状态。旧 ad hoc 构建的授权可能不适用于当前稳定签名：退出开发版，在系统权限列表中仅移除旧的 `Pastes Dev.app` 条目，再添加当前 `build/Debug/Pastes Dev.app` 并开启，随后重新启动应用。macOS 可能需要本人认证。使用时先点击目标输入框，再用快捷键唤出历史面板；未授权时内容仍会复制，并显示可手动 `⌘V` 粘贴的提示。
 
 ## 使用方式
 
@@ -71,6 +108,7 @@ rm -rf dmg_staging build
 ## 系统要求
 
 - macOS 26.0 或更高版本
+- 源码开发：Swift 6.2 或更高版本的 Command Line Tools、首次构建时联网
 
 ## 许可证
 

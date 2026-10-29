@@ -6,18 +6,18 @@
 //
 
 import Foundation
-import SwiftData
 
-@Model
-final class ClipboardItem {
+struct ClipboardItem: Identifiable, Equatable {
+    var id: UUID
     var content: String
     var imageData: Data?
     var rtfData: Data?
     var timestamp: Date
     var isPinned: Bool
-    var isImage: Bool = false
+    var isImage: Bool
 
-    init(content: String, imageData: Data? = nil, rtfData: Data? = nil, timestamp: Date = Date(), isPinned: Bool = false) {
+    init(id: UUID = UUID(), content: String, imageData: Data? = nil, rtfData: Data? = nil, timestamp: Date = Date(), isPinned: Bool = false) {
+        self.id = id
         self.content = content
         self.imageData = imageData
         self.rtfData = rtfData

@@ -14,11 +14,13 @@ DerivedData/
 .LSOverride
 ._*
 
+# Local development signing certificate selection
+.pastes-signing-identity
+
 # Swift Package Manager
 .build/
 Packages/
 Package.pins
-Package.resolved
 *.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
 
 # Misc

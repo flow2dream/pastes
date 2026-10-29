@@ -7,78 +7,129 @@
 
 import Carbon.HIToolbox
 import AppKit
+import Combine
 
-final class HotkeyManager {
+@MainActor
+final class HotkeyManager: ObservableObject {
     static let shared = HotkeyManager()
 
     private var hotKeyRef: EventHotKeyRef?
     private var eventHandlerRef: EventHandlerRef?
     private var onTrigger: (() -> Void)?
+    private var activeBinding: Binding?
+    private var activeHotKeyID: UInt32?
+    private var nextHotKeyID: UInt32 = 1
+    @Published private(set) var registrationError: String?
+
+    private struct Binding: Equatable {
+        let keyCode: Int
+        let modifiers: Int
+    }
 
     private let defaults = UserDefaults.standard
     private let keyCodeKey = "hotkey_keyCode"
     private let modifiersKey = "hotkey_modifiers"
 
+    static var defaultModifiers: Int {
+        cmdKey | shiftKey | (AppEnvironment.isDevelopment ? optionKey : 0)
+    }
+
+    static var defaultDisplayString: String {
+        formatDisplay(keyCode: kVK_ANSI_V, modifiers: defaultModifiers)
+    }
+
     var keyCode: Int {
         get { defaults.object(forKey: keyCodeKey) as? Int ?? kVK_ANSI_V }
-        set { defaults.set(newValue, forKey: keyCodeKey) }
     }
 
     var modifiers: Int {
-        get { defaults.object(forKey: modifiersKey) as? Int ?? (cmdKey | shiftKey) }
-        set { defaults.set(newValue, forKey: modifiersKey) }
+        get { defaults.object(forKey: modifiersKey) as? Int ?? Self.defaultModifiers }
     }
 
     private init() {}
 
-    func register(onTrigger: @escaping () -> Void) {
+    @discardableResult
+    func register(onTrigger: @escaping () -> Void) -> Bool {
         self.onTrigger = onTrigger
-        unregister()
+        return replaceRegistration(with: Binding(keyCode: keyCode, modifiers: modifiers))
+    }
 
-        // Install event handler
+    private func installEventHandlerIfNeeded() -> Bool {
+        if eventHandlerRef != nil { return true }
         var eventType = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
             eventKind: UInt32(kEventHotKeyPressed)
         )
-
+        var handler: EventHandlerRef?
         let status = InstallEventHandler(
             GetApplicationEventTarget(),
-            { _, _, refcon -> OSStatus in
-                guard let refcon else { return noErr }
-                DispatchQueue.main.async {
-                    Unmanaged<HotkeyManager>.fromOpaque(refcon).takeUnretainedValue().onTrigger?()
+            { _, event, refcon -> OSStatus in
+                guard let event, let refcon else { return OSStatus(eventNotHandledErr) }
+                var pressedID = EventHotKeyID()
+                let status = GetEventParameter(
+                    event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
+                    nil, MemoryLayout<EventHotKeyID>.size, nil, &pressedID
+                )
+                guard status == noErr, pressedID.signature == OSType(0x505354) else { return OSStatus(eventNotHandledErr) }
+                let identifier = pressedID.id
+                let manager = Unmanaged<HotkeyManager>.fromOpaque(refcon).takeUnretainedValue()
+                DispatchQueue.main.async { [weak manager] in
+                    // Ignore queued events from a replaced or failed candidate binding.
+                    guard let manager, manager.activeHotKeyID == identifier else { return }
+                    manager.onTrigger?()
                 }
                 return noErr
             },
-            1,
-            &eventType,
-            Unmanaged.passUnretained(self).toOpaque(),
-            &eventHandlerRef
+            1, &eventType, Unmanaged.passUnretained(self).toOpaque(), &handler
         )
+        guard status == noErr, let handler else {
+            registrationError = "\(L("hotkey_handler_failed")) (\(status))"
+            return false
+        }
+        eventHandlerRef = handler
+        return true
+    }
 
-        guard status == noErr else {
-            print("Failed to install event handler: \(status)")
-            return
+    private func replaceRegistration(with candidate: Binding) -> Bool {
+        if hotKeyRef != nil, activeBinding == candidate {
+            registrationError = nil
+            return true
+        }
+        guard UInt32(exactly: candidate.keyCode) != nil,
+              UInt32(exactly: candidate.modifiers) != nil else {
+            registrationError = "\(L("hotkey_registration_failed")) (\(paramErr))"
+            return false
+        }
+        guard installEventHandlerIfNeeded() else { return false }
+
+        let identifier = nextHotKeyID
+        nextHotKeyID = nextHotKeyID == UInt32.max ? 1 : nextHotKeyID + 1
+        var candidateRef: EventHotKeyRef?
+        let status = RegisterEventHotKey(
+            UInt32(candidate.keyCode), UInt32(candidate.modifiers),
+            EventHotKeyID(signature: OSType(0x505354), id: identifier),
+            GetApplicationEventTarget(), OptionBits(kEventHotKeyExclusive), &candidateRef
+        )
+        guard status == noErr, let candidateRef else {
+            if let candidateRef { UnregisterEventHotKey(candidateRef) }
+            registrationError = "\(L("hotkey_registration_failed")) (\(status))"
+            return false
         }
 
-        // Register hotkey
-        let hotKeyID = EventHotKeyID(
-            signature: OSType(0x505354),  // "PST"
-            id: 1
-        )
-
-        let regStatus = RegisterEventHotKey(
-            UInt32(keyCode),
-            UInt32(modifiers),
-            hotKeyID,
-            GetApplicationEventTarget(),
-            0,
-            &hotKeyRef
-        )
-
-        if regStatus != noErr {
-            print("Failed to register hotkey: \(regStatus)")
+        // The old key remains usable until the candidate is confirmed registered.
+        if let previousRef = hotKeyRef {
+            let removalStatus = UnregisterEventHotKey(previousRef)
+            guard removalStatus == noErr else {
+                UnregisterEventHotKey(candidateRef)
+                registrationError = "\(L("hotkey_registration_failed")) (\(removalStatus))"
+                return false
+            }
         }
+        hotKeyRef = candidateRef
+        activeHotKeyID = identifier
+        activeBinding = candidate
+        registrationError = nil
+        return true
     }
 
     func unregister() {
@@ -86,18 +137,22 @@ final class HotkeyManager {
             UnregisterEventHotKey(ref)
             hotKeyRef = nil
         }
+        activeHotKeyID = nil
+        activeBinding = nil
+        onTrigger = nil
         if let handler = eventHandlerRef {
             RemoveEventHandler(handler)
             eventHandlerRef = nil
         }
     }
 
-    func update(keyCode: Int, modifiers: Int) {
-        self.keyCode = keyCode
-        self.modifiers = modifiers
-        if let onTrigger {
-            register(onTrigger: onTrigger)
-        }
+    @discardableResult
+    func update(keyCode: Int, modifiers: Int) -> Bool {
+        guard replaceRegistration(with: Binding(keyCode: keyCode, modifiers: modifiers)) else { return false }
+        // Persist only after success; a conflict leaves the old defaults untouched.
+        defaults.set(keyCode, forKey: keyCodeKey)
+        defaults.set(modifiers, forKey: modifiersKey)
+        return true
     }
 
     // MARK: - Display

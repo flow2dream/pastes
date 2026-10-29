@@ -7,7 +7,6 @@
 
 import AppKit
 import SwiftUI
-import SwiftData
 
 // MARK: - Custom Status Bar Button
 
@@ -34,16 +33,20 @@ final class PanelManager: NSObject {
     private var panel: NSPanel?
     private var settingsWindow: NSWindow?
     private var statusItem: NSStatusItem?
-    private let modelContainer: ModelContainer
+    private let store: ClipboardStore
     private var previousApp: NSRunningApplication?
     private var globalMonitor: Any?
+    private let workspaceNotifications = NSWorkspace.shared.notificationCenter
+    private var activationObserver: NSObjectProtocol?
+    private var pendingPaste: (id: UUID, targetPID: pid_t)?
     var isPanelPinned = false
 
     var panelWindow: NSWindow? { panel }
 
-    init(modelContainer: ModelContainer) {
-        self.modelContainer = modelContainer
+    init(store: ClipboardStore) {
+        self.store = store
         super.init()
+        trackActiveApplication()
         setupStatusItem()
         setupPanel()
     }
@@ -57,7 +60,7 @@ final class PanelManager: NSObject {
 
         let customButton = StatusButton(frame: button.bounds)
         customButton.isBordered = false
-        customButton.image = NSImage(systemSymbolName: "clipboard.fill", accessibilityDescription: "Pastes")
+        customButton.image = NSImage(systemSymbolName: "clipboard.fill", accessibilityDescription: AppEnvironment.displayName)
         customButton.imagePosition = .imageOnly
         customButton.onLeftClick = { [weak self] in
             self?.toggle()
@@ -104,10 +107,10 @@ final class PanelManager: NSObject {
 
         let settingsView = SettingsView()
         let hostingView = NSHostingView(rootView: settingsView)
-        hostingView.frame = NSRect(x: 0, y: 0, width: 420, height: 460)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 540, height: 560)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 460),
+            contentRect: NSRect(x: 0, y: 0, width: 540, height: 560),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -132,6 +135,7 @@ final class PanelManager: NSObject {
 
     private func setupPanel() {
         let contentView = ContentView(
+            store: store,
             onOpenSettings: { [weak self] in
                 self?.openSettings()
             },
@@ -141,22 +145,28 @@ final class PanelManager: NSObject {
             onTogglePin: { [weak self] in
                 self?.isPanelPinned.toggle()
                 return self?.isPanelPinned ?? false
+            },
+            onDismiss: { [weak self] in
+                self?.hidePanel()
             }
         )
-        .modelContainer(modelContainer)
 
         let hostingView = NSHostingView(rootView: contentView)
-        hostingView.frame = NSRect(x: 0, y: 0, width: 420, height: 520)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 520, height: 540)
 
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 540),
             styleMask: [.titled, .closable, .nonactivatingPanel, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         panel.contentView = hostingView
-        panel.title = "Pastes"
+        panel.title = AppEnvironment.displayName
+        panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
+        panel.standardWindowButton(.closeButton)?.isHidden = true
+        panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        panel.standardWindowButton(.zoomButton)?.isHidden = true
         panel.isFloatingPanel = true
         panel.becomesKeyOnlyIfNeeded = true
         panel.hidesOnDeactivate = false
@@ -168,7 +178,7 @@ final class PanelManager: NSObject {
         panel.animationBehavior = .utilityWindow
         panel.delegate = self
         panel.contentView?.wantsLayer = true
-        panel.contentView?.layer?.cornerRadius = 1
+        panel.contentView?.layer?.cornerRadius = 12
         panel.contentView?.layer?.masksToBounds = true
 
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
@@ -188,6 +198,34 @@ final class PanelManager: NSObject {
         if let monitor = globalMonitor {
             NSEvent.removeMonitor(monitor)
         }
+        if let observer = activationObserver {
+            workspaceNotifications.removeObserver(observer)
+        }
+    }
+
+    private func trackActiveApplication() {
+        if let current = NSWorkspace.shared.frontmostApplication {
+            rememberPasteTarget(current)
+        }
+        activationObserver = workspaceNotifications.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] notification in
+            guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+            MainActor.assumeIsolated {
+                self?.rememberPasteTarget(app)
+            }
+        }
+    }
+
+    private func rememberPasteTarget(_ app: NSRunningApplication) {
+        guard app.processIdentifier != ProcessInfo.processInfo.processIdentifier,
+              !app.isTerminated else { return }
+        previousApp = app
+        // A user switching elsewhere during the delay cancels this request.
+        if let pendingPaste, pendingPaste.targetPID != app.processIdentifier {
+            PasteTrace.record("paste_cancelled", details: ["reason": "other_app_activated", "expectedPID": pendingPaste.targetPID, "activatedPID": app.processIdentifier])
+            self.pendingPaste = nil
+        }
     }
 
     func toggle(atMouse: Bool = false) {
@@ -196,15 +234,15 @@ final class PanelManager: NSObject {
             hidePanel()
         } else {
             // Capture frontmost app before we take focus
-            let ourPID = ProcessInfo.processInfo.processIdentifier
-            if let current = NSWorkspace.shared.frontmostApplication, current.processIdentifier != ourPID {
-                previousApp = current
+            if let current = NSWorkspace.shared.frontmostApplication {
+                rememberPasteTarget(current)
             }
             showPanel(atMouse: atMouse)
         }
     }
 
     private func showPanel(atMouse: Bool = false) {
+        pendingPaste = nil
         guard let panel else { return }
         let panelSize = panel.frame.size
         let screenFrame = NSScreen.main?.visibleFrame ?? .zero
@@ -228,24 +266,64 @@ final class PanelManager: NSObject {
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         panel.orderFrontRegardless()
+        PasteTrace.record("panel_shown", details: ["visible": panel.isVisible, "appHidden": NSApp.isHidden, "isKey": panel.isKeyWindow])
     }
 
     private func handlePaste() {
-        hidePanel()
-
-        // Activate the previous app
-        if let app = previousApp {
-            app.activate()
+        PasteTrace.record("paste_requested")
+        guard PastePermission.isGranted else {
+            PasteFeedback.shared.needsPermission = true
+            PasteTrace.record("paste_blocked", details: ["reason": "event_posting_not_allowed"])
+            return
         }
-        NSApp.hide(nil)
+        PasteFeedback.shared.needsPermission = false
+        hidePanel()
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        guard let current = NSWorkspace.shared.frontmostApplication else {
+            PasteTrace.record("paste_cancelled", details: ["reason": "no_frontmost_app"])
+            return
+        }
+        if current.processIdentifier != ownPID {
+            rememberPasteTarget(current)
+        }
+        guard let target = previousApp, !target.isTerminated else {
+            PasteTrace.record("paste_cancelled", details: ["reason": "no_live_target", "frontPID": current.processIdentifier])
+            return
+        }
+        let requestID = UUID()
+        let targetPID = target.processIdentifier
+        pendingPaste = (requestID, targetPID)
+        PasteTrace.record("paste_target", details: ["frontPID": current.processIdentifier, "targetPID": targetPID, "ownPID": ownPID])
 
-        // Give time for focus to fully switch
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        if current.processIdentifier == ownPID {
+            // Return from our panel once. If activation fails, do not retry or paste.
+            guard target.activate() else {
+                PasteTrace.record("paste_cancelled", details: ["reason": "target_activation_failed", "targetPID": targetPID])
+                pendingPaste = nil
+                return
+            }
+            NSApp.hide(nil)
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self, self.pendingPaste?.id == requestID else {
+                PasteTrace.record("paste_cancelled", details: ["reason": "request_no_longer_pending"])
+                return
+            }
+            self.pendingPaste = nil
+            guard !target.isTerminated,
+                  NSWorkspace.shared.frontmostApplication?.processIdentifier == targetPID else {
+                PasteTrace.record("paste_cancelled", details: ["reason": "target_not_frontmost", "targetPID": targetPID, "frontPID": NSWorkspace.shared.frontmostApplication?.processIdentifier ?? -1])
+                return
+            }
+            PasteTrace.record("paste_target_ready", details: ["targetPID": targetPID])
             ClipboardMonitor.simulatePaste()
         }
     }
 
     private func hidePanel() {
+        PasteTrace.record("panel_hidden")
+        pendingPaste = nil
         panel?.orderOut(nil)
     }
 }

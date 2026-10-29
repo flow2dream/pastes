@@ -8,18 +8,20 @@
 import SwiftUI
 import Carbon.HIToolbox
 import ServiceManagement
+import ApplicationServices
 
 struct SettingsView: View {
-    @State private var isRecording = false
-    @State private var recordedKeyCode: Int?
-    @State private var recordedModifiers: Int?
-    @State private var hotkeyManager = HotkeyManager.shared
+    @ViewState private var isRecording = false
+    @ViewState private var recordedKeyCode: Int?
+    @ViewState private var recordedModifiers: Int?
+    @ObservedObject private var hotkeyManager = HotkeyManager.shared
     @AppStorage("maxClipboardItems") private var maxItems = 20
     @AppStorage("appLanguage") private var language: AppLanguage = .zh
-    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
-    @State private var showConflictAlert = false
-    @State private var hoveredButton: String?
-    private let updateManager = UpdateManager.shared
+    @ObservedObject private var loginItemManager = LoginItemManager.shared
+    @ViewState private var showConflictAlert = false
+    @ViewState private var accessibilityGranted = PastePermission.isGranted
+    @ObservedObject private var updateManager = UpdateManager.shared
+
     private var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
     }
@@ -53,280 +55,318 @@ struct SettingsView: View {
         (kVK_RightArrow, cmdKey),
     ]
 
-    private func isSystemShortcut(keyCode: Int, modifiers: Int) -> Bool {
-        for (sysKey, sysMod) in Self.systemShortcuts {
-            if keyCode == sysKey && modifiers == sysMod {
-                return true
-            }
-        }
-        return false
-    }
-
-    private var defaultModifiers: Int {
-        HotkeyManager.modifierFlagsToInt([.command, .shift])
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            VStack(spacing: 6) {
-                Image(systemName: "clipboard.fill")
-                    .font(.system(size: 28))
-                    .foregroundStyle(.linearGradient(
-                        colors: [.accentColor, .accentColor.opacity(0.6)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ))
+            HStack(alignment: .firstTextBaseline) {
                 Text(L("settings_title"))
-                    .font(.title3.bold())
+                    .font(.system(size: 15, weight: .semibold))
+                Spacer()
+                Text("\(L("version_label")) \(appVersion)")
+                    .font(.system(size: 11))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
             }
-            .padding(.top, 20)
-            .padding(.bottom, 16)
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
+            .padding(.bottom, 14)
+
+            Divider()
 
             ScrollView {
-                VStack(spacing: 14) {
-                    // Hotkey section
-                    settingsCard(icon: "keyboard.fill", title: L("hotkey_title"), accent: .blue) {
-                        Text(L("hotkey_desc"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.bottom, 6)
-
-                        HStack(spacing: 10) {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(isRecording
-                                        ? Color.accentColor.opacity(0.1)
-                                        : Color(nsColor: .controlBackgroundColor))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(
-                                                isRecording
-                                                    ? Color.accentColor.opacity(0.5)
-                                                    : Color(nsColor: .separatorColor).opacity(0.5),
-                                                lineWidth: 1
-                                            )
-                                    )
-
-                                if isRecording {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "mic.fill")
-                                            .font(.system(size: 11))
-                                            .foregroundStyle(.red)
-                                        Text(L("hotkey_recording"))
-                                            .font(.system(.body, design: .monospaced))
-                                            .foregroundStyle(.secondary)
-                                    }
-                                } else {
-                                    Text(hotkeyManager.displayString)
-                                        .font(.system(.body, design: .monospaced))
-                                }
-                            }
-                            .frame(height: 34)
-                            .frame(maxWidth: 200)
-                            .onTapGesture { startRecording() }
-
-                            if isRecording {
-                                Button(L("hotkey_cancel")) { stopRecording() }
-                                    .buttonStyle(.bordered)
-                                    .brightness(hoveredButton == "cancel" ? 0.1 : 0)
-                                    .scaleEffect(hoveredButton == "cancel" ? 1.03 : 1.0)
-                                    .animation(.easeInOut(duration: 0.15), value: hoveredButton)
-                                    .onHover { hoveredButton = $0 ? "cancel" : nil }
-                            } else {
-                                Button(L("hotkey_reset")) {
-                                    hotkeyManager.update(keyCode: kVK_ANSI_V, modifiers: defaultModifiers)
-                                }
-                                .buttonStyle(.bordered)
-                                .brightness(hoveredButton == "reset" ? 0.1 : 0)
-                                .scaleEffect(hoveredButton == "reset" ? 1.03 : 1.0)
-                                .animation(.easeInOut(duration: 0.15), value: hoveredButton)
-                                .onHover { hoveredButton = $0 ? "reset" : nil }
-                            }
-                        }
-
-                        if isRecording {
-                            Text(L("hotkey_hint"))
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                                .padding(.top, 2)
-                        }
-                    }
-
-                    // History limit section
-                    settingsCard(icon: "archivebox.fill", title: L("history_limit_title"), accent: .orange) {
-                        Text(L("history_limit_desc"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.bottom, 6)
-
-                        HStack(spacing: 8) {
-                            TextField("", value: $maxItems, format: .number)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 72)
-                            Text(L("history_limit_items"))
-                                .foregroundStyle(.secondary)
-                                .font(.subheadline)
-                        }
-                    }
-
-                    // Language section
-                    settingsCard(icon: "globe", title: L("language_title"), accent: .purple) {
-                        Text(L("language_desc"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.bottom, 6)
-
-                        Picker("", selection: $language) {
-                            ForEach(AppLanguage.allCases, id: \.self) { lang in
-                                Text(lang.displayName).tag(lang)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .frame(width: 180)
-                        .labelsHidden()
-                    }
-
-                    // Launch at login section
-                    settingsCard(icon: "power", title: L("launch_at_login_title"), accent: .green) {
-                        HStack {
-                            Text(L("launch_at_login_desc"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Toggle("", isOn: $launchAtLogin)
-                                .toggleStyle(.switch)
-                                .labelsHidden()
-                                .onChange(of: launchAtLogin) { _, newValue in
-                                    do {
-                                        if newValue {
-                                            try SMAppService.mainApp.register()
-                                        } else {
-                                            try SMAppService.mainApp.unregister()
-                                        }
-                                    } catch {
-                                        launchAtLogin = SMAppService.mainApp.status == .enabled
-                                    }
-                                }
-                        }
-                    }
-
-                    // Update section
-                    settingsCard(icon: "arrow.triangle.2.circlepath", title: L("update_title"), accent: .teal) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(L("update_desc"))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text("\(L("version_label")) \(appVersion)")
-                                    .font(.caption2)
-                                    .foregroundStyle(.tertiary)
-                            }
-                            Spacer()
-                            Button {
-                                updateManager.checkForUpdates()
-                            } label: {
-                                Label(L("check_update_now"), systemImage: "arrow.down.circle")
-                                    .font(.subheadline)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .tint(.teal)
-                            .brightness(hoveredButton == "update" ? 0.1 : 0)
-                            .scaleEffect(hoveredButton == "update" ? 1.03 : 1.0)
-                            .animation(.easeInOut(duration: 0.15), value: hoveredButton)
-                            .onHover { hoveredButton = $0 ? "update" : nil }
-                        }
-                    }
-
-                    // Tips section
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label(L("tips_title"), systemImage: "lightbulb.max")
-                            .font(.subheadline.bold())
-                            .foregroundStyle(.orange)
-                        tipRow(L("tip_modifier"))
-                        tipRow(L("tip_global"))
-                        tipRow(L("tip_default"))
-                    }
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.orange.opacity(0.05))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color.orange.opacity(0.12), lineWidth: 1)
-                    )
+                VStack(alignment: .leading, spacing: 16) {
+                    generalSection
+                    shortcutSection
+                    systemSection
+                    updateSection
                 }
-                .padding(.horizontal, 18)
-                .padding(.bottom, 20)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 16)
             }
         }
-        .frame(width: 420, height: 480)
-        .background(KeyEventHandler(isRecording: $isRecording, keyCode: $recordedKeyCode, modifiers: $recordedModifiers) {
-            if let key = recordedKeyCode, let mods = recordedModifiers {
-                if isSystemShortcut(keyCode: key, modifiers: mods) {
-                    showConflictAlert = true
-                } else {
-                    hotkeyManager.update(keyCode: key, modifiers: mods)
-                }
-            }
-            stopRecording()
-        })
+        .font(.system(size: 13))
+        .controlSize(.small)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .frame(width: 540, height: 560)
+        .background(
+            KeyEventHandler(
+                isRecording: $isRecording,
+                keyCode: $recordedKeyCode,
+                modifiers: $recordedModifiers,
+                onRecorded: finishRecording,
+                onCancel: stopRecording
+            )
+            .frame(width: 0, height: 0)
+        )
         .alert(L("hotkey_conflict_title"), isPresented: $showConflictAlert) {
             Button(L("hotkey_conflict_ok")) {}
         } message: {
-            Text(L("hotkey_conflict_msg"))
+            Text(hotkeyManager.registrationError ?? L("hotkey_conflict_msg"))
+        }
+        .onAppear(perform: refreshSystemStatus)
+        .onDisappear(perform: stopRecording)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshSystemStatus()
         }
     }
 
-    // MARK: - Components
+    // MARK: - General
 
-    private func settingsCard<Content: View>(
-        icon: String,
-        title: String,
-        accent: Color,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(accent)
-                    .frame(width: 28, height: 28)
-                    .background(accent.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                Text(title)
-                    .font(.system(.subheadline, weight: .semibold))
+    private var generalSection: some View {
+        settingsSection(L("settings_general")) {
+            settingsRow(L("history_limit_title"), subtitle: L("history_limit_compact_hint")) {
+                HStack(spacing: 6) {
+                    TextField("", value: $maxItems, format: .number)
+                        .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 58)
+                        .accessibilityLabel(L("history_limit_title"))
+                    Text(L("history_limit_items"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
             }
-            content()
+            .help(L("history_limit_desc"))
+
+            rowDivider
+
+            settingsRow(L("language_title")) {
+                Picker(L("language_title"), selection: $language) {
+                    ForEach(AppLanguage.allCases, id: \.self) { language in
+                        Text(language.displayName).tag(language)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .frame(width: 116)
+            }
+            .help(L("language_desc"))
+
+            rowDivider
+
+            settingsRow(L("launch_at_login_title")) {
+                HStack(spacing: 10) {
+                    if loginItemManager.status == .requiresApproval {
+                        Text(L("login_pending_status"))
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    Toggle(L("launch_at_login_toggle"), isOn: Binding(
+                        get: { loginItemManager.isRequested },
+                        set: { loginItemManager.setEnabled($0) }
+                    ))
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                }
+            }
+            .help(L("launch_at_login_desc"))
+
+            if loginItemManager.status == .requiresApproval {
+                HStack(alignment: .center, spacing: 12) {
+                    Text(L("login_approval_required"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Button(L("login_open_settings")) {
+                        SMAppService.openSystemSettingsLoginItems()
+                    }
+                    .fixedSize()
+                }
+                .padding(.horizontal, 14)
+                .padding(.bottom, 12)
+            }
+
+            if let error = loginItemManager.errorMessage {
+                groupNote(L("login_change_failed") + " " + error, isError: true)
+            }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.4))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color(nsColor: .separatorColor).opacity(0.3), lineWidth: 1)
-        )
     }
 
-    private func tipRow(_ text: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 10))
-                .foregroundStyle(.green)
-                .padding(.top, 3)
-            Text(text)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+    // MARK: - Shortcut
+
+    private var shortcutSection: some View {
+        settingsSection(L("hotkey_title")) {
+            settingsRow(L("hotkey_show_panel")) {
+                HStack(spacing: 8) {
+                    Button(action: startRecording) {
+                        Text(isRecording ? L("hotkey_recording") : hotkeyManager.displayString)
+                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .foregroundStyle(isRecording ? .secondary : .primary)
+                            .padding(.horizontal, 10)
+                            .frame(minWidth: 110, minHeight: 28)
+                            .background(Color(nsColor: .textBackgroundColor))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(
+                                        isRecording ? Color.primary.opacity(0.5) : Color(nsColor: .separatorColor).opacity(0.65),
+                                        lineWidth: 0.5
+                                    )
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(L("hotkey_title"))
+                    .help(L("hotkey_hint"))
+
+                    if isRecording {
+                        Button(L("hotkey_cancel"), action: stopRecording)
+                    } else {
+                        Button(L("hotkey_reset")) {
+                            if !hotkeyManager.update(keyCode: kVK_ANSI_V, modifiers: HotkeyManager.defaultModifiers) {
+                                showConflictAlert = true
+                            }
+                        }
+                    }
+                }
+            }
+            .help(L("hotkey_desc"))
+
+            if isRecording {
+                groupNote(L("tip_modifier"))
+            } else {
+                groupNote(L("hotkey_default_label") + " " + HotkeyManager.defaultDisplayString)
+            }
+
+            if let error = hotkeyManager.registrationError {
+                groupNote(error, isError: true)
+            }
         }
+    }
+
+    // MARK: - System
+
+    private var systemSection: some View {
+        settingsSection(L("settings_system")) {
+            settingsRow(L("settings_auto_paste")) {
+                HStack(spacing: 10) {
+                    Text(L(accessibilityGranted ? "accessibility_status_granted" : "accessibility_status_required"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    if !accessibilityGranted {
+                        Button(L("accessibility_open_settings")) {
+                            ClipboardMonitor.requestAccessibility()
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !accessibilityGranted {
+                groupNote(L("accessibility_required"))
+            }
+        }
+    }
+
+    // MARK: - Updates
+
+    private var updateSection: some View {
+        settingsSection(L("update_title")) {
+            HStack(alignment: .center, spacing: 16) {
+                Text(L(AppEnvironment.isDevelopment ? "update_development_desc" : "update_desc"))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button(L("check_update_now")) {
+                    updateManager.checkForUpdates()
+                }
+                .disabled(!updateManager.canCheckForUpdates)
+                .fixedSize()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+
+            if let error = updateManager.startupError {
+                groupNote(L("update_start_failed") + " " + error, isError: true)
+            }
+        }
+    }
+
+    // MARK: - Shared layout
+
+    private func settingsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 3)
+
+            VStack(spacing: 0, content: content)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color(nsColor: .separatorColor).opacity(0.45), lineWidth: 0.5)
+                )
+        }
+    }
+
+    private func settingsRow<Control: View>(
+        _ title: String,
+        subtitle: String? = nil,
+        @ViewBuilder control: () -> Control
+    ) -> some View {
+        HStack(alignment: .center, spacing: 16) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            control().fixedSize()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    private var rowDivider: some View {
+        Divider().padding(.horizontal, 14)
+    }
+
+    private func groupNote(_ text: String, isError: Bool = false) -> some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundStyle(isError ? Color.red : Color.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.bottom, 11)
     }
 
     // MARK: - Actions
 
+    private func refreshSystemStatus() {
+        loginItemManager.refresh()
+        accessibilityGranted = PastePermission.isGranted
+        if accessibilityGranted { PasteFeedback.shared.needsPermission = false }
+    }
+
+    private func isSystemShortcut(keyCode: Int, modifiers: Int) -> Bool {
+        Self.systemShortcuts.contains { $0.0 == keyCode && $0.1 == modifiers }
+    }
+
     private func startRecording() {
-        isRecording = true
+        guard !isRecording else { return }
         recordedKeyCode = nil
         recordedModifiers = nil
+        isRecording = true
+    }
+
+    private func finishRecording() {
+        if let key = recordedKeyCode, let modifiers = recordedModifiers {
+            if isSystemShortcut(keyCode: key, modifiers: modifiers)
+                || !hotkeyManager.update(keyCode: key, modifiers: modifiers) {
+                showConflictAlert = true
+            }
+        }
+        stopRecording()
     }
 
     private func stopRecording() {
@@ -334,46 +374,92 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - Key Event Handler
+// MARK: - Shortcut capture
 
 private struct KeyEventHandler: NSViewRepresentable {
     @Binding var isRecording: Bool
     @Binding var keyCode: Int?
     @Binding var modifiers: Int?
     var onRecorded: () -> Void
+    var onCancel: () -> Void
 
     func makeNSView(context: Context) -> KeyCaptureView {
-        let view = KeyCaptureView()
+        KeyCaptureView()
+    }
+
+    func updateNSView(_ view: KeyCaptureView, context: Context) {
         view.onKeyDown = { event in
             guard isRecording else { return }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            let intMods = HotkeyManager.modifierFlagsToInt(flags)
-            guard intMods != 0 else { return }
+            let modifiersValue = HotkeyManager.modifierFlagsToInt(flags)
+            guard modifiersValue != 0 else { return }
             keyCode = Int(event.keyCode)
-            modifiers = intMods
+            modifiers = modifiersValue
             onRecorded()
         }
-        return view
+        view.onCancel = onCancel
+        view.isRecording = isRecording
     }
 
-    func updateNSView(_ nsView: KeyCaptureView, context: Context) {}
+    static func dismantleNSView(_ view: KeyCaptureView, coordinator: ()) {
+        view.isRecording = false
+    }
 }
 
 private class KeyCaptureView: NSView {
     var onKeyDown: ((NSEvent) -> Void)?
+    var onCancel: (() -> Void)?
+    private weak var previousResponder: NSResponder?
 
-    override var acceptsFirstResponder: Bool { true }
+    var isRecording = false {
+        didSet {
+            guard isRecording != oldValue else { return }
+            if isRecording { beginCapture() }
+            else { endCapture() }
+        }
+    }
+
+    override var acceptsFirstResponder: Bool { isRecording }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        window?.makeFirstResponder(self)
+        if isRecording { beginCapture() }
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil { endCapture() }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
+    private func beginCapture() {
+        guard let window, window.firstResponder !== self else { return }
+        if let editor = window.firstResponder as? NSTextView, editor.isFieldEditor,
+           let control = editor.delegate as? NSResponder {
+            previousResponder = control
+        } else {
+            previousResponder = window.firstResponder
+        }
+        window.makeFirstResponder(self)
+    }
+
+    private func endCapture() {
+        if let window, window.firstResponder === self {
+            if !window.makeFirstResponder(previousResponder) {
+                window.makeFirstResponder(nil)
+            }
+        }
+        previousResponder = nil
     }
 
     override func keyDown(with event: NSEvent) {
-        onKeyDown?(event)
+        guard isRecording else {
+            super.keyDown(with: event)
+            return
+        }
+        if event.keyCode == UInt16(kVK_Escape) {
+            onCancel?()
+        } else {
+            onKeyDown?(event)
+        }
     }
-}
-
-#Preview {
-    SettingsView()
 }
