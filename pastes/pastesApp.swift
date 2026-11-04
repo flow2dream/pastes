@@ -6,8 +6,24 @@
 //
 
 import SwiftUI
+import OSLog
 
 @main
+@MainActor
+enum PastesBootstrap {
+    static func main() {
+        if AppEnvironment.isDevelopment {
+            // SwiftUI otherwise creates its own NSApplication subclass and
+            // ignores NSPrincipalClass. Keep the scene/delegate lifecycle while
+            // observing events before application-local monitors.
+            let application = PastesApplication.shared
+            withExtendedLifetime(application) { pastesApp.main() }
+        } else {
+            pastesApp.main()
+        }
+    }
+}
+
 struct pastesApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
@@ -25,8 +41,15 @@ struct pastesApp: App {
 class AppDelegate: NSObject, NSApplicationDelegate {
     private let hotkeyManager = HotkeyManager.shared
     private var panelManager: PanelManager!
+    private var clipboardSession: ClipboardSession?
+    private var captures: CaptureController?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        if AppEnvironment.isDevelopment, let application = NSApp {
+            let runtime = NSStringFromClass(type(of: application))
+            Logger(subsystem: "com.pastes.capture", category: "pinch")
+                .notice("APP INPUT launch runtime=\(runtime, privacy: .public)")
+        }
         // Set app language before any framework loads
         let lang = UserDefaults.standard.string(forKey: "appLanguage") ?? "zh_CN"
         UserDefaults.standard.set([lang], forKey: "AppleLanguages")
@@ -51,7 +74,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        panelManager = PanelManager(store: store)
+        let session = ClipboardSession(store: store)
+        clipboardSession = session
+        do {
+            let library = try CaptureLibrary(directory: AppEnvironment.storageURL.deletingLastPathComponent().appendingPathComponent("CaptureLibrary", isDirectory: true))
+            let controller = CaptureController(library: library, session: session)
+            captures = controller
+            NSApp.servicesProvider = controller
+            controller.start()
+        } catch {
+            session.errorMessage = error.localizedDescription
+        }
+        panelManager = PanelManager(store: store, session: session, captures: captures)
+        session.start()
         if PasteTrace.isEnabled {
             panelManager.isPanelPinned = true
         }
@@ -77,5 +112,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         hotkeyManager.unregister()
+        captures?.stop()
+        clipboardSession?.stop()
     }
 }

@@ -11,7 +11,27 @@ import Combine
 
 @MainActor
 final class HotkeyManager: ObservableObject {
+    private static let managers = NSHashTable<HotkeyManager>.weakObjects()
     static let shared = HotkeyManager()
+    private static var recordingCount = 0
+    static func beginRecording() {
+        recordingCount += 1
+        guard recordingCount == 1 else { return }
+        for manager in managers.allObjects {
+            if let ref = manager.hotKeyRef { UnregisterEventHotKey(ref); manager.hotKeyRef = nil }
+            manager.activeHotKeyID = nil
+        }
+    }
+    static func endRecording() {
+        recordingCount = max(0, recordingCount - 1)
+        guard recordingCount == 0 else { return }
+        for manager in managers.allObjects where manager.onTrigger != nil {
+            _ = manager.replaceRegistration(with: Binding(keyCode: manager.keyCode, modifiers: manager.modifiers))
+        }
+    }
+    static func accepts(keyCode: Int, modifiers: Int) -> Bool {
+        modifiers != 0 || [kVK_F1, kVK_F2, kVK_F3, kVK_F4, kVK_F5, kVK_F6, kVK_F7, kVK_F8, kVK_F9, kVK_F10, kVK_F11, kVK_F12, kVK_F13, kVK_F14, kVK_F15, kVK_F16, kVK_F17, kVK_F18, kVK_F19, kVK_F20].contains(keyCode)
+    }
 
     private var hotKeyRef: EventHotKeyRef?
     private var eventHandlerRef: EventHandlerRef?
@@ -27,8 +47,11 @@ final class HotkeyManager: ObservableObject {
     }
 
     private let defaults = UserDefaults.standard
-    private let keyCodeKey = "hotkey_keyCode"
-    private let modifiersKey = "hotkey_modifiers"
+    private let keyCodeKey: String
+    private let modifiersKey: String
+    private let initialKeyCode: Int
+    private let initialModifiers: Int
+    private let signature: UInt32
 
     static var defaultModifiers: Int {
         cmdKey | shiftKey | (AppEnvironment.isDevelopment ? optionKey : 0)
@@ -39,14 +62,22 @@ final class HotkeyManager: ObservableObject {
     }
 
     var keyCode: Int {
-        get { defaults.object(forKey: keyCodeKey) as? Int ?? kVK_ANSI_V }
+        get { defaults.object(forKey: keyCodeKey) as? Int ?? initialKeyCode }
     }
 
     var modifiers: Int {
-        get { defaults.object(forKey: modifiersKey) as? Int ?? Self.defaultModifiers }
+        get { defaults.object(forKey: modifiersKey) as? Int ?? initialModifiers }
     }
 
-    private init() {}
+    init(prefix: String = "hotkey", keyCode: Int = kVK_ANSI_V,
+         modifiers: Int? = nil, signature: UInt32 = 0x505354) {
+        keyCodeKey = prefix + "_keyCode"
+        modifiersKey = prefix + "_modifiers"
+        initialKeyCode = keyCode
+        initialModifiers = modifiers ?? Self.defaultModifiers
+        self.signature = signature
+        Self.managers.add(self)
+    }
 
     @discardableResult
     func register(onTrigger: @escaping () -> Void) -> Bool {
@@ -70,9 +101,10 @@ final class HotkeyManager: ObservableObject {
                     event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
                     nil, MemoryLayout<EventHotKeyID>.size, nil, &pressedID
                 )
-                guard status == noErr, pressedID.signature == OSType(0x505354) else { return OSStatus(eventNotHandledErr) }
+                guard status == noErr else { return OSStatus(eventNotHandledErr) }
                 let identifier = pressedID.id
                 let manager = Unmanaged<HotkeyManager>.fromOpaque(refcon).takeUnretainedValue()
+                guard pressedID.signature == manager.signature else { return OSStatus(eventNotHandledErr) }
                 DispatchQueue.main.async { [weak manager] in
                     // Ignore queued events from a replaced or failed candidate binding.
                     guard let manager, manager.activeHotKeyID == identifier else { return }
@@ -107,7 +139,7 @@ final class HotkeyManager: ObservableObject {
         var candidateRef: EventHotKeyRef?
         let status = RegisterEventHotKey(
             UInt32(candidate.keyCode), UInt32(candidate.modifiers),
-            EventHotKeyID(signature: OSType(0x505354), id: identifier),
+            EventHotKeyID(signature: signature, id: identifier),
             GetApplicationEventTarget(), OptionBits(kEventHotKeyExclusive), &candidateRef
         )
         guard status == noErr, let candidateRef else {
@@ -148,10 +180,24 @@ final class HotkeyManager: ObservableObject {
 
     @discardableResult
     func update(keyCode: Int, modifiers: Int) -> Bool {
+        guard Self.accepts(keyCode: keyCode, modifiers: modifiers) else {
+            registrationError = C("请使用功能键，或带 ⌘ / ⌥ / ⌃ / ⇧ 的组合键。", "Use a function key or a key with modifiers.")
+            return false
+        }
+        let commonCommandKeys = [kVK_ANSI_Q, kVK_ANSI_W, kVK_ANSI_C, kVK_ANSI_V, kVK_ANSI_X, kVK_ANSI_Z, kVK_ANSI_A, kVK_ANSI_S, kVK_ANSI_P, kVK_ANSI_F, kVK_ANSI_H, kVK_ANSI_M, kVK_ANSI_N, kVK_ANSI_O, kVK_Space, kVK_Tab]
+        if (modifiers == cmdKey && commonCommandKeys.contains(keyCode)) || (modifiers == cmdKey | shiftKey && [kVK_ANSI_3, kVK_ANSI_4, kVK_ANSI_5, kVK_ANSI_Z].contains(keyCode)) {
+            registrationError = C("这是系统或常用编辑快捷键，请换一个组合。", "This is a system or common editing shortcut. Choose another combination.")
+            return false
+        }
+        guard !Self.managers.allObjects.contains(where: { $0 !== self && $0.keyCodeKey != keyCodeKey && $0.keyCode == keyCode && $0.modifiers == modifiers }) else {
+            registrationError = C("这个快捷键已用于本应用的其他功能。", "This shortcut is assigned to another action in this app.")
+            return false
+        }
         guard replaceRegistration(with: Binding(keyCode: keyCode, modifiers: modifiers)) else { return false }
         // Persist only after success; a conflict leaves the old defaults untouched.
         defaults.set(keyCode, forKey: keyCodeKey)
         defaults.set(modifiers, forKey: modifiersKey)
+        objectWillChange.send()
         return true
     }
 
@@ -196,6 +242,8 @@ final class HotkeyManager: ObservableObject {
     // MARK: - Key Code Mapping
 
     static func keyCodeToString(_ code: Int) -> String? {
+        let functionKeys = [kVK_F1, kVK_F2, kVK_F3, kVK_F4, kVK_F5, kVK_F6, kVK_F7, kVK_F8, kVK_F9, kVK_F10, kVK_F11, kVK_F12, kVK_F13, kVK_F14, kVK_F15, kVK_F16, kVK_F17, kVK_F18, kVK_F19, kVK_F20]
+        if let index = functionKeys.firstIndex(of: code) { return "F\(index + 1)" }
         switch code {
         case kVK_ANSI_A: return "A"
         case kVK_ANSI_B: return "B"

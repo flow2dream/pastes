@@ -11,6 +11,8 @@ import ServiceManagement
 import ApplicationServices
 
 struct SettingsView: View {
+    var captures: CaptureController?
+    var onClose: () -> Void = {}
     @ViewState private var isRecording = false
     @ViewState private var recordedKeyCode: Int?
     @ViewState private var recordedModifiers: Int?
@@ -57,36 +59,63 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(L("settings_title"))
-                    .font(.system(size: 15, weight: .semibold))
-                Spacer()
-                Text("\(L("version_label")) \(appVersion)")
-                    .font(.system(size: 11))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    PastesGlassIcon(symbol: "slider.horizontal.3", tint: .blue, size: 42)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(L("settings_title"))
+                            .font(.system(size: 21, weight: .bold, design: .rounded))
+                        Text(AppEnvironment.displayName)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Text("\(L("version_label")) \(appVersion)")
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 7)
+                        .pastesGlass(cornerRadius: 100)
+                }
+                .contentShape(Rectangle())
+                .gesture(WindowDragGesture())
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .frame(width: 16, height: 16)
+                }
+                .buttonStyle(PastesGlassButtonStyle(compact: true))
+                .foregroundStyle(.secondary)
+                .accessibilityLabel(C("关闭设置", "Close settings"))
+                .help(C("关闭设置（⌘W）", "Close settings (⌘W)"))
+                .keyboardShortcut("w", modifiers: .command)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 18)
-            .padding(.bottom, 14)
-
-            Divider()
+            .padding(.horizontal, 24)
+            .padding(.top, 20)
+            .padding(.bottom, 16)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 14) {
                     generalSection
+                    if let captures { CaptureSettingsView(controller: captures) }
                     shortcutSection
                     systemSection
                     updateSection
                 }
                 .padding(.horizontal, 20)
-                .padding(.vertical, 16)
+                .padding(.top, 2)
+                .padding(.bottom, 22)
             }
         }
         .font(.system(size: 13))
         .controlSize(.small)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .buttonStyle(PastesGlassButtonStyle(compact: true))
+        .tint(.blue)
+        .background(PastesWindowBackground(cornerRadius: 28))
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .frame(width: 540, height: 560)
+        .ignoresSafeArea(.container, edges: .top)
         .background(
             KeyEventHandler(
                 isRecording: $isRecording,
@@ -112,13 +141,16 @@ struct SettingsView: View {
     // MARK: - General
 
     private var generalSection: some View {
-        settingsSection(L("settings_general")) {
+        settingsSection(L("settings_general"), symbol: "slider.horizontal.3", tint: .blue) {
             settingsRow(L("history_limit_title"), subtitle: L("history_limit_compact_hint")) {
                 HStack(spacing: 6) {
                     TextField("", value: $maxItems, format: .number)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.plain)
                         .multilineTextAlignment(.trailing)
-                        .frame(width: 58)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .frame(width: 64)
+                        .pastesGlass(cornerRadius: 11)
                         .accessibilityLabel(L("history_limit_title"))
                     Text(L("history_limit_items"))
                         .font(.system(size: 11))
@@ -172,8 +204,8 @@ struct SettingsView: View {
                     }
                     .fixedSize()
                 }
-                .padding(.horizontal, 14)
-                .padding(.bottom, 12)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 15)
             }
 
             if let error = loginItemManager.errorMessage {
@@ -185,26 +217,15 @@ struct SettingsView: View {
     // MARK: - Shortcut
 
     private var shortcutSection: some View {
-        settingsSection(L("hotkey_title")) {
+        settingsSection(L("hotkey_title"), symbol: "keyboard", tint: .indigo) {
             settingsRow(L("hotkey_show_panel")) {
                 HStack(spacing: 8) {
                     Button(action: startRecording) {
                         Text(isRecording ? L("hotkey_recording") : hotkeyManager.displayString)
                             .font(.system(size: 12, weight: .medium, design: .monospaced))
-                            .foregroundStyle(isRecording ? .secondary : .primary)
-                            .padding(.horizontal, 10)
-                            .frame(minWidth: 110, minHeight: 28)
-                            .background(Color(nsColor: .textBackgroundColor))
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .stroke(
-                                        isRecording ? Color.primary.opacity(0.5) : Color(nsColor: .separatorColor).opacity(0.65),
-                                        lineWidth: 0.5
-                                    )
-                            )
+                            .frame(minWidth: 88)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PastesGlassButtonStyle(prominence: isRecording ? .accent : .standard, compact: true))
                     .accessibilityLabel(L("hotkey_title"))
                     .help(L("hotkey_hint"))
 
@@ -236,12 +257,15 @@ struct SettingsView: View {
     // MARK: - System
 
     private var systemSection: some View {
-        settingsSection(L("settings_system")) {
+        settingsSection(L("settings_system"), symbol: "hand.raised.fill", tint: .teal) {
             settingsRow(L("settings_auto_paste")) {
                 HStack(spacing: 10) {
                     Text(L(accessibilityGranted ? "accessibility_status_granted" : "accessibility_status_required"))
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(accessibilityGranted ? Color.green : Color.secondary)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .pastesGlass(cornerRadius: 100, tint: accessibilityGranted ? .green.opacity(0.1) : nil)
                     if !accessibilityGranted {
                         Button(L("accessibility_open_settings")) {
                             ClipboardMonitor.requestAccessibility()
@@ -262,7 +286,7 @@ struct SettingsView: View {
     // MARK: - Updates
 
     private var updateSection: some View {
-        settingsSection(L("update_title")) {
+        settingsSection(L("update_title"), symbol: "arrow.triangle.2.circlepath", tint: .purple) {
             HStack(alignment: .center, spacing: 16) {
                 Text(L(AppEnvironment.isDevelopment ? "update_development_desc" : "update_desc"))
                     .font(.system(size: 12))
@@ -275,8 +299,8 @@ struct SettingsView: View {
                 .disabled(!updateManager.canCheckForUpdates)
                 .fixedSize()
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
 
             if let error = updateManager.startupError {
                 groupNote(L("update_start_failed") + " " + error, isError: true)
@@ -286,22 +310,23 @@ struct SettingsView: View {
 
     // MARK: - Shared layout
 
-    private func settingsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 3)
-
+    private func settingsSection<Content: View>(_ title: String, symbol: String, tint: Color, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                PastesGlassIcon(symbol: symbol, tint: tint, size: 32)
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 15)
+            .padding(.bottom, 4)
             VStack(spacing: 0, content: content)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(nsColor: .controlBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color(nsColor: .separatorColor).opacity(0.45), lineWidth: 0.5)
-                )
         }
+        .padding(.bottom, 3)
+        .pastesGlass(cornerRadius: 24)
+        .shadow(color: .black.opacity(0.045), radius: 12, y: 5)
     }
 
     private func settingsRow<Control: View>(
@@ -322,12 +347,12 @@ struct SettingsView: View {
 
             control().fixedSize()
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
     }
 
     private var rowDivider: some View {
-        Divider().padding(.horizontal, 14)
+        Divider().opacity(0.28).padding(.horizontal, 18)
     }
 
     private func groupNote(_ text: String, isError: Bool = false) -> some View {
@@ -336,8 +361,8 @@ struct SettingsView: View {
             .foregroundStyle(isError ? Color.red : Color.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 14)
-            .padding(.bottom, 11)
+            .padding(.horizontal, 18)
+            .padding(.bottom, 14)
     }
 
     // MARK: - Actions
@@ -376,7 +401,7 @@ struct SettingsView: View {
 
 // MARK: - Shortcut capture
 
-private struct KeyEventHandler: NSViewRepresentable {
+struct KeyEventHandler: NSViewRepresentable {
     @Binding var isRecording: Bool
     @Binding var keyCode: Int?
     @Binding var modifiers: Int?
@@ -392,7 +417,7 @@ private struct KeyEventHandler: NSViewRepresentable {
             guard isRecording else { return }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             let modifiersValue = HotkeyManager.modifierFlagsToInt(flags)
-            guard modifiersValue != 0 else { return }
+            guard HotkeyManager.accepts(keyCode: Int(event.keyCode), modifiers: modifiersValue) else { return }
             keyCode = Int(event.keyCode)
             modifiers = modifiersValue
             onRecorded()
@@ -406,10 +431,13 @@ private struct KeyEventHandler: NSViewRepresentable {
     }
 }
 
-private class KeyCaptureView: NSView {
+class KeyCaptureView: NSView {
+    private static weak var activeRecorder: KeyCaptureView?
     var onKeyDown: ((NSEvent) -> Void)?
     var onCancel: (() -> Void)?
     private weak var previousResponder: NSResponder?
+    private var localMonitor: Any?
+    private var suspended = false
 
     var isRecording = false {
         didSet {
@@ -433,6 +461,18 @@ private class KeyCaptureView: NSView {
 
     private func beginCapture() {
         guard let window, window.firstResponder !== self else { return }
+        if let other = Self.activeRecorder, other !== self {
+            other.isRecording = false; other.onCancel?()
+        }
+        Self.activeRecorder = self
+        if !suspended { HotkeyManager.beginRecording(); suspended = true }
+        if localMonitor == nil {
+            localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self, self.isRecording, event.window === self.window else { return event }
+                self.keyDown(with: event)
+                return nil
+            }
+        }
         if let editor = window.firstResponder as? NSTextView, editor.isFieldEditor,
            let control = editor.delegate as? NSResponder {
             previousResponder = control
@@ -443,6 +483,10 @@ private class KeyCaptureView: NSView {
     }
 
     private func endCapture() {
+        if Self.activeRecorder === self { Self.activeRecorder = nil }
+        if let localMonitor { NSEvent.removeMonitor(localMonitor) }
+        localMonitor = nil
+        if suspended { suspended = false; HotkeyManager.endRecording() }
         if let window, window.firstResponder === self {
             if !window.makeFirstResponder(previousResponder) {
                 window.makeFirstResponder(nil)

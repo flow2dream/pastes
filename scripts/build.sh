@@ -98,10 +98,13 @@ if [[ ! -s "$sparkle_license" ]]; then
     exit 1
 fi
 cp "$sparkle_license" "$staged_app/Contents/Resources/Sparkle-LICENSE.txt"
+cp "$project_dir/THIRD_PARTY_NOTICES.md" "$staged_app/Contents/Resources/THIRD_PARTY_NOTICES.md"
 
 plist="$staged_app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier" "$plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName $app_name" "$plist"
+/usr/libexec/PlistBuddy -c "Set :NSServices:0:NSMenuItem:default Add to $app_name Capture Shelf" "$plist"
+/usr/libexec/PlistBuddy -c "Set :NSServices:0:NSPortName $app_name" "$plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $app_name" "$plist"
 /usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable pastes' "$plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$plist"
@@ -115,6 +118,9 @@ plist="$staged_app/Contents/Info.plist"
 iconset="$staging_dir/AppIcon.iconset"
 mkdir -p "$iconset"
 cp "$project_dir/pastes/Assets.xcassets/AppIcon.appiconset/"*.png "$iconset/"
+if [[ "$variant" == development ]]; then
+    /usr/bin/xcrun swift "$project_dir/scripts/badge-development-icon.swift" "$iconset"
+fi
 /usr/bin/iconutil --convert icns --output "$staged_app/Contents/Resources/AppIcon.icns" "$iconset"
 /usr/libexec/PlistBuddy -c 'Add :CFBundleIconFile string AppIcon' "$plist"
 /usr/bin/plutil -lint "$plist"

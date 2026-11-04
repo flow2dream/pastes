@@ -177,7 +177,12 @@ struct ClipboardMonitorTests {
         monitor.start(interval: 0.01) { text, _ in captured.append(text) }
         board.clearContents()
         #expect(board.setString("captured while running", forType: .string))
-        try await Task.sleep(for: .milliseconds(80))
+        // Image import tests can occupy the main actor longer than one polling interval.
+        // Wait for the observable event rather than assuming the timer ran within 80 ms.
+        let deadline = ContinuousClock.now + .seconds(2)
+        while captured.isEmpty && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
         #expect(captured == ["captured while running"])
 
         monitor.start(interval: 0.01) { text, _ in captured.append(text) }

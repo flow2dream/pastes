@@ -6,6 +6,33 @@
         <description>Most recent changes with links to updates.</description>
         <language>en</language>
         <item>
+            <title>Version 1.2.0</title>
+            <description><![CDATA[
+                <h3>Pastes v1.2.0</h3>
+                <ul>
+                    <li>新增快捷键图片架，支持复制采集、悬停预览、拖放、固定、批量移除与自适应容量</li>
+                    <li>内置区域截图及标注，确认后选择复制并挂上、另存文件或固定到屏幕</li>
+                    <li>悬浮参考图片支持选中后的系统双指捏合缩放；关闭挂回图片架，销毁直接丢弃</li>
+                    <li>图片另存副本／覆盖媒体库原图，导入录屏播放与 AVKit 裁剪</li>
+                    <li>统一玻璃界面，修复应用切换、重复设置窗口及截图入架动画问题</li>
+                    <li>完整中英文说明、可自定义的三个快捷键与独立开发版</li>
+                </ul>
+                <p>从 1.1.0 升级保留 SQLite 历史。1.0.x 或更早的 SwiftData 历史不会自动迁移，旧文件保留。</p>
+                <p>Apple Silicon，macOS 26.0+。使用开发证书签名，尚未进行 Developer ID 公证。</p>
+                <p>Adds a capture shelf, annotated screenshots, native pinch-to-zoom floating images and a unified glass interface. Save writes a file only; Close returns floating images to the shelf.</p>
+            ]]></description>
+            <pubDate>Wed, 04 Nov 2026 16:20:13 +0800</pubDate>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <enclosure
+                url="https://github.com/flow2dream/pastes/releases/download/v1.2.0/Pastes-1.2.0-arm64.dmg"
+                sparkle:version="5"
+                sparkle:shortVersionString="1.2.0"
+                length="2447227"
+                type="application/octet-stream"
+                sparkle:edSignature="QI2snp8pwEIT0qQ0j3tIHByCmASdedpNpp1p18613Mny3BeM5p9wqSYacgOMYfFMioBmhMZ8DL3oV3lZ47B2Ag=="
+            />
+        </item>
+        <item>
             <title>Version 1.1.0</title>
             <description><![CDATA[
                 <h3>Pastes v1.1.0</h3>

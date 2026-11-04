@@ -52,11 +52,37 @@ final class ClipboardStore: ObservableObject {
         }
     }
 
-    func addImage(_ data: Data, limit: Int) throws {
+    @discardableResult
+    func addImage(_ data: Data, limit: Int) throws -> UUID {
+        if let existing = items.first(where: { $0.isImage && $0.imageData == data }) {
+            try transaction {
+                try withStatement("UPDATE clipboard_items SET timestamp = ? WHERE id = ?") { statement in
+                    try check(sqlite3_bind_double(statement, 1, Date().timeIntervalSince1970))
+                    try bind(existing.id.uuidString, to: 2, in: statement)
+                    try finish(statement)
+                }
+                try enforceLimit(limit)
+            }
+            return existing.id
+        }
+        let item = ClipboardItem(content: "[Image]", imageData: data)
         try transaction {
-            try insert(ClipboardItem(content: "[Image]", imageData: data))
+            try insert(item)
             try enforceLimit(limit)
         }
+        return item.id
+    }
+
+    /// Insert an edited snapshot and publish only if its associated shelf update also succeeds.
+    @discardableResult
+    func addEditedImage(_ data: Data, limit: Int, updateShelf: (UUID) throws -> Void) throws -> UUID {
+        let item = ClipboardItem(content: "[Image]", imageData: data)
+        try transaction {
+            try insert(item)
+            try enforceLimit(limit)
+            try updateShelf(item.id)
+        }
+        return item.id
     }
 
     func togglePin(id: UUID) throws {

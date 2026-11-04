@@ -34,6 +34,8 @@ final class PanelManager: NSObject {
     private var settingsWindow: NSWindow?
     private var statusItem: NSStatusItem?
     private let store: ClipboardStore
+    private let session: ClipboardSession
+    private let captures: CaptureController?
     private var previousApp: NSRunningApplication?
     private var globalMonitor: Any?
     private let workspaceNotifications = NSWorkspace.shared.notificationCenter
@@ -43,12 +45,22 @@ final class PanelManager: NSObject {
 
     var panelWindow: NSWindow? { panel }
 
-    init(store: ClipboardStore) {
+    init(store: ClipboardStore, session: ClipboardSession, captures: CaptureController?) {
         self.store = store
+        self.session = session
+        self.captures = captures
         super.init()
         trackActiveApplication()
         setupStatusItem()
         setupPanel()
+        captures?.onShelfWillShow = { [weak self] in
+            // Unhiding the app (including orderFrontRegardless) restores its old
+            // windows too. The shelf shortcut must not resurrect Settings/history.
+            guard NSApp.isHidden else { return }
+            self?.hidePanel()
+            self?.settingsWindow?.orderOut(nil)
+        }
+        captures?.onScreenshotWillBegin = { [weak self] in self?.hidePanel() }
     }
 
     // MARK: - Status Bar
@@ -62,6 +74,10 @@ final class PanelManager: NSObject {
         customButton.isBordered = false
         customButton.image = NSImage(systemSymbolName: "clipboard.fill", accessibilityDescription: AppEnvironment.displayName)
         customButton.imagePosition = .imageOnly
+        if AppEnvironment.isDevelopment {
+            customButton.image = NSImage(systemSymbolName: "hammer.circle.fill", accessibilityDescription: "Pastes Dev")
+            customButton.toolTip = "Pastes Dev — Development"
+        }
         customButton.onLeftClick = { [weak self] in
             self?.toggle()
         }
@@ -86,7 +102,18 @@ final class PanelManager: NSObject {
         settingsItem.target = self
         menu.addItem(settingsItem)
 
+        if let captures {
+            let shelfItem = NSMenuItem(title: C("显示截图架", "Show capture shelf"), action: #selector(showCaptureShelf), keyEquivalent: "")
+            shelfItem.target = self; shelfItem.isEnabled = captures.enabled
+            menu.addItem(shelfItem)
+        }
         menu.addItem(.separator())
+
+        if captures != nil {
+            let screenshotItem = NSMenuItem(title: C("框选截图", "Take screenshot"), action: #selector(takeNativeScreenshot), keyEquivalent: "")
+            screenshotItem.target = self
+            menu.insertItem(screenshotItem, at: 0)
+        }
 
         let quitItem = NSMenuItem(title: L("quit_app"), action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
@@ -97,6 +124,10 @@ final class PanelManager: NSObject {
         statusItem?.menu = nil
     }
 
+    @objc private func takeNativeScreenshot() { captures?.takeScreenshot() }
+
+    @objc private func showCaptureShelf() { captures?.shelf?.show() }
+
     @objc func openSettings() {
         hidePanel()
         if let settingsWindow {
@@ -105,18 +136,31 @@ final class PanelManager: NSObject {
             return
         }
 
-        let settingsView = SettingsView()
+        let settingsView = SettingsView(captures: captures, onClose: { [weak self] in
+            self?.settingsWindow?.performClose(nil)
+        })
         let hostingView = NSHostingView(rootView: settingsView)
+        hostingView.sizingOptions = []
         hostingView.frame = NSRect(x: 0, y: 0, width: 540, height: 560)
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 540, height: 560),
-            styleMask: [.titled, .closable],
+            styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         window.contentView = hostingView
-        window.title = L("settings_title")
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.titlebarSeparatorStyle = .none
+        window.standardWindowButton(.closeButton)?.isHidden = true
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isHidden = true
+        window.isMovableByWindowBackground = true
+        window.title = AppEnvironment.displayName + " · " + L("settings_title")
+        window.setFrame(NSRect(x: 0, y: 0, width: 540, height: 560), display: false)
         window.center()
         window.isReleasedWhenClosed = false
         window.delegate = self
@@ -136,6 +180,7 @@ final class PanelManager: NSObject {
     private func setupPanel() {
         let contentView = ContentView(
             store: store,
+            session: session,
             onOpenSettings: { [weak self] in
                 self?.openSettings()
             },
@@ -174,11 +219,11 @@ final class PanelManager: NSObject {
         panel.isMovableByWindowBackground = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isOpaque = false
-        panel.backgroundColor = .windowBackgroundColor
+        panel.backgroundColor = .clear
         panel.animationBehavior = .utilityWindow
         panel.delegate = self
         panel.contentView?.wantsLayer = true
-        panel.contentView?.layer?.cornerRadius = 12
+        panel.contentView?.layer?.cornerRadius = 28
         panel.contentView?.layer?.masksToBounds = true
 
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
